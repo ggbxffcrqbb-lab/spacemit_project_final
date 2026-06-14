@@ -33,6 +33,7 @@ Muse Pi Pro (K1) 板端正式工程。
 更完整的维护规则见：
 
 - [docs/git-maintenance.md](docs/git-maintenance.md)
+- [docs/project-status-handoff.md](docs/project-status-handoff.md)
 
 ## 常用命令
 
