@@ -30,6 +30,10 @@ Muse Pi Pro (K1) 板端正式工程。
 
 这意味着 `assets/bootstrap/` 目录可以保留结构与说明，但真正的 bootstrap 权重默认只保留在板端本地或 Windows 中转目录，不再作为 GitHub 仓库内容长期托管。
 
+更完整的维护规则见：
+
+- [docs/git-maintenance.md](docs/git-maintenance.md)
+
 ## 常用命令
 
 ```bash
