@@ -1,0 +1,15 @@
+{"module":"asr","tag":"asr_cpuset_0-3_t2","cpuset":"0-3","threads":2,"status":"failed","rc":1}
+{"module":"asr","tag":"asr_cpuset_0-3_t3","cpuset":"0-3","threads":3,"status":"failed","rc":1}
+{"module":"asr","tag":"asr_cpuset_0-3_t4","cpuset":"0-3","threads":4,"status":"failed","rc":1}
+{"module":"asr","tag":"asr_cpuset_0-3_t6","cpuset":"0-3","threads":6,"status":"failed","rc":1}
+{"module":"asr","tag":"asr_cpuset_0-3_t8","cpuset":"0-3","threads":8,"status":"failed","rc":1}
+{"module":"asr","tag":"asr_cpuset_0-7_t2","cpuset":"0-7","threads":2,"status":"failed","rc":1}
+{"module":"asr","tag":"asr_cpuset_0-7_t3","cpuset":"0-7","threads":3,"status":"failed","rc":1}
+{"module":"asr","tag":"asr_cpuset_0-7_t4","cpuset":"0-7","threads":4,"status":"failed","rc":1}
+{"module":"asr","tag":"asr_cpuset_0-7_t6","cpuset":"0-7","threads":6,"status":"failed","rc":1}
+{"module":"asr","tag":"asr_cpuset_0-7_t8","cpuset":"0-7","threads":8,"status":"failed","rc":1}
+{"module":"asr","tag":"asr_cpuset_4-7_t2","cpuset":"4-7","threads":2,"status":"failed","rc":1}
+{"module":"asr","tag":"asr_cpuset_4-7_t3","cpuset":"4-7","threads":3,"status":"failed","rc":1}
+{"module":"asr","tag":"asr_cpuset_4-7_t4","cpuset":"4-7","threads":4,"status":"failed","rc":1}
+{"module":"asr","tag":"asr_cpuset_4-7_t6","cpuset":"4-7","threads":6,"status":"failed","rc":1}
+{"module":"asr","tag":"asr_cpuset_4-7_t8","cpuset":"4-7","threads":8,"status":"failed","rc":1}

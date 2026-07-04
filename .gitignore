@@ -8,6 +8,7 @@ logs/
 *.log
 *.jsonl
 benchmarks/voice_mode_compare_*.json
+!benchmarks/results/**/*.jsonl
 
 assets/bootstrap/asr/sensevoice-small/model_quant_optimized.onnx
 assets/bootstrap/asr/sensevoice-small/model_quant.onnx
