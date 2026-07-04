@@ -1,0 +1,27 @@
+{
+  "model_parameters": {
+    "onnx_model": "yolov8n_corrosion_warmstart_v1.q.onnx",
+    "working_dir": "./tmp",
+    "skip_onnxsim": false
+  },
+  "calibration_parameters": {
+    "calibration_type": "minmax",
+    "input_parametres": [
+      {
+        "mean_value": [0, 0, 0],
+        "std_value": [255, 255, 255],
+        "color_format": "rgb",
+        "data_list_path": "data/vision/defect_dataset/calibration/calib_list.txt"
+      }
+    ]
+  },
+  "quantization_parameters": {
+    "finetune_level": 3,
+    "max_percentile": 0.9995,
+    "truncate_var_names": [
+      "/model.22/Reshape_output_0",
+      "/model.22/Reshape_1_output_0",
+      "/model.22/Reshape_2_output_0"
+    ]
+  }
+}

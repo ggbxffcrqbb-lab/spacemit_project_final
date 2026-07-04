@@ -9,7 +9,12 @@ class Tokenizer:
         decode_model_path
     ):
         self.sess_options = ort.SessionOptions()
-        self.sess_options.register_custom_ops_library(ortext_path)
+        try:
+            self.sess_options.register_custom_ops_library(ortext_path)
+        except Exception as exc:
+            raise RuntimeError(
+                f"Failed to register ONNX Runtime extensions library: {ortext_path}"
+            ) from exc
         self.sess_options.intra_op_num_threads = 4
         self.sess = ort.InferenceSession(
             decode_model_path,

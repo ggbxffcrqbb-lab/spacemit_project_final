@@ -1,0 +1,15 @@
+# Board-side diagnostic config: run the float ONNX model with CPUExecutionProvider
+# to isolate quantization/runtime issues from model-format/postprocess issues.
+
+model_path: /mnt/ssd/models/vision/defect/yolov8n_seg_corrosion_4cls_v1.onnx
+test_image: /mnt/ssd/data/vision/corrosion_seg_4cls_v1/valid_00000_000224_jpg.rf.f27dd719a335ff6ceead46fb26ab2851.jpg
+label_file_path: /mnt/ssd/spacemit_project/assets/labels/defect_segmentation_4cls.txt
+image_size: [320, 320]
+class: deploy.yolov8_seg.YOLOv8SegDetector
+
+default_params:
+  conf_threshold: 0.25
+  iou_threshold: 0.45
+  num_threads: 4
+  providers:
+    - CPUExecutionProvider

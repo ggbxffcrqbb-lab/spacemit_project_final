@@ -1,0 +1,15 @@
+# Experimental SpaceMIT VisionService config for the warm-start defect model.
+# This file is opt-in and should not replace the default official YOLOv8 config.
+
+model_path: /mnt/ssd/models/vision/defect/yolov8n_corrosion_warmstart_v1.q.onnx
+test_image: ~/.cache/assets/image/006_test.jpg
+label_file_path: /mnt/ssd/spacemit_project/assets/labels/defect_detection.txt
+image_size: [320, 320]
+class: deploy.yolov8.YOLOv8Detector
+
+default_params:
+  conf_threshold: 0.25
+  iou_threshold: 0.45
+  num_threads: 4
+  providers:
+    - SpaceMITExecutionProvider

@@ -1,0 +1,4 @@
+All TTS models for zh are ready!
+Using cppjieba dictionary at: /home/fyp/.cache/thirdparty/cppjieba/dict
+Loaded 66375 entries from lexicon.
+Warming up TTS models...

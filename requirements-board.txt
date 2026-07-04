@@ -10,3 +10,4 @@ kaldi-native-fbank==1.20.1
 pypinyin==0.54.0
 transformers==4.40.0
 numpy==1.26.4
+Pillow==10.2.0

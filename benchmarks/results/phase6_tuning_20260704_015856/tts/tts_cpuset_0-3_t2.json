@@ -1,0 +1,108 @@
+All TTS models for zh are ready!
+Using cppjieba dictionary at: /home/fyp/.cache/thirdparty/cppjieba/dict
+Loaded 66375 entries from lexicon.
+Warming up TTS models...
+TTS models warmed up in 1038ms
+{
+  "tag": "tts_cpuset_0-3_t2",
+  "repo_root": "/mnt/ssd/spacemit_project/third_party/model-zoo-tts",
+  "preset": "matcha_zh",
+  "provider": "cpu",
+  "threads": 2,
+  "speech_rate": 1.0,
+  "warmup": true,
+  "requests": 4,
+  "sleep_ms": 0,
+  "text_key": "zh_medium",
+  "text_chars": 47,
+  "text": "你好，这是 Muse Pi Pro 上的语音合成性能测试，我们需要关注首包时延和整体推理效率。",
+  "engine_name": "Matcha-TTS (Chinese)",
+  "engine_sample_rate": 22050,
+  "init_wall_ms": 30000.4,
+  "runs": [
+    {
+      "request": 1,
+      "wall_ms": 9018.458,
+      "duration_ms": 7511,
+      "processing_time_ms": 9018,
+      "rtf": 1.200639,
+      "sample_rate": 22050,
+      "audio_samples": 165632
+    },
+    {
+      "request": 2,
+      "wall_ms": 8983.295,
+      "duration_ms": 7511,
+      "processing_time_ms": 8982,
+      "rtf": 1.195846,
+      "sample_rate": 22050,
+      "audio_samples": 165632
+    },
+    {
+      "request": 3,
+      "wall_ms": 8982.37,
+      "duration_ms": 7511,
+      "processing_time_ms": 8982,
+      "rtf": 1.195846,
+      "sample_rate": 22050,
+      "audio_samples": 165632
+    },
+    {
+      "request": 4,
+      "wall_ms": 8978.708,
+      "duration_ms": 7511,
+      "processing_time_ms": 8978,
+      "rtf": 1.195314,
+      "sample_rate": 22050,
+      "audio_samples": 165632
+    }
+  ],
+  "summary": {
+    "all_wall_ms": {
+      "min": 8978.708,
+      "max": 9018.458,
+      "mean": 8990.708,
+      "median": 8982.833
+    },
+    "all_processing_time_ms": {
+      "min": 8978,
+      "max": 9018,
+      "mean": 8990,
+      "median": 8982.0
+    },
+    "all_rtf": {
+      "min": 1.195,
+      "max": 1.201,
+      "mean": 1.197,
+      "median": 1.196
+    },
+    "first_request": {
+      "request": 1,
+      "wall_ms": 9018.458,
+      "duration_ms": 7511,
+      "processing_time_ms": 9018,
+      "rtf": 1.200639,
+      "sample_rate": 22050,
+      "audio_samples": 165632
+    },
+    "steady_state_wall_ms": {
+      "min": 8978.708,
+      "max": 8983.295,
+      "mean": 8981.458,
+      "median": 8982.37
+    },
+    "steady_state_processing_time_ms": {
+      "min": 8978,
+      "max": 8982,
+      "mean": 8980.667,
+      "median": 8982
+    },
+    "steady_state_rtf": {
+      "min": 1.195,
+      "max": 1.196,
+      "mean": 1.196,
+      "median": 1.196
+    },
+    "cold_to_steady_wall_delta_ms": 37.0
+  }
+}

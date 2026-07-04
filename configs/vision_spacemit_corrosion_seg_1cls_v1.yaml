@@ -1,0 +1,15 @@
+# SpaceMIT YOLOv8-Seg q.onnx config for the clean 1-class corrosion segmentation experiment.
+# This config is intended for the official yolov8_seg validation path on Muse Pi Pro.
+
+model_path: /mnt/ssd/models/vision/corrosion_two_stage/seg/yolov8n_seg_corrosion_1cls_v1.q.onnx
+test_image: /mnt/ssd/data/vision/corrosion_two_stage/samples/seg_val_sample.jpg
+label_file_path: /mnt/ssd/spacemit_project/assets/labels/corrosion_seg_1cls.txt
+image_size: [320, 320]
+class: deploy.yolov8_seg.YOLOv8SegDetector
+
+default_params:
+  conf_threshold: 0.25
+  iou_threshold: 0.45
+  num_threads: 2
+  providers:
+    - SpaceMITExecutionProvider

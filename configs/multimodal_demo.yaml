@@ -1,0 +1,166 @@
+project:
+  name: spacemit_project
+  root_dir: /mnt/ssd/spacemit_project
+  models_dir: /mnt/ssd/models
+  data_dir: /mnt/ssd/data
+  cache_dir: /mnt/ssd/cache
+
+logging:
+  level: INFO
+  dir: /mnt/ssd/logs/spacemit_project/multimodal_demo
+  runtime_file: multimodal_runtime.log
+  turns_file: multimodal_turns.jsonl
+
+voice:
+  playback_device: plughw:0,0
+  playback_volume: 120%
+  playback_sample_rate: 48000
+  playback_channels: 2
+  segment_max_chars: 20
+  segment_min_chars: 8
+  prewarm_llm: true
+  prewarm_tts: true
+
+  asr:
+    model_dir: /mnt/ssd/models/asr/sensevoice-small
+    prefer_optimized_model: true
+    language: zh
+    use_itn: true
+    batch_size: 10
+    intra_op_num_threads: 4
+
+  llm:
+    model: qwen2.5:0.5b
+    api_url: http://127.0.0.1:11434/api/chat
+    system_prompt: >
+      你是运行在 Muse Pi Pro 板端的离线防腐专家助手。
+      请直接使用中文回答，优先给出保守、清晰、可执行的判断。
+    max_tokens: 48
+    temperature: 0.0
+    num_ctx: 1024
+    num_thread: 4
+    keep_alive: 30m
+    timeout: 300
+    max_chars: 48
+    min_chars: 10
+    stop_after_first_sentence: true
+    warmup_prompt: 请只回答“收到”。
+
+  tts:
+    matcha_root: /mnt/ssd/spacemit_project/third_party/model-zoo-tts
+    model_dir: /mnt/ssd/models/tts/matcha-tts
+    provider: cpu
+    default_preset: matcha_zh
+    mixed_preset: matcha_zh_en
+    chinese_mode: quality
+    speed: 1.0
+    volume: 100
+    threads: 4
+    enable_warmup: true
+    allow_cpu_fallback: true
+    preload_mixed_engine: false
+    warmup_text_zh: 你好。
+    warmup_text_mixed: 今天学习 Python。
+    keep_tts_wav: false
+    trace_init: false
+
+rag:
+  enabled: true
+  knowledge_dir: /mnt/ssd/spacemit_project/data/knowledge
+  index_path: /mnt/ssd/spacemit_project/data/index/knowledge_index.json
+  top_k: 3
+  chunk_max_chars: 220
+  min_score: 0.8
+  max_context_chars: 900
+  citation_limit: 2
+  direct_answer_score: 2.0
+
+ui:
+  enabled: true
+  status_dir: /mnt/ssd/logs/spacemit_project/multimodal_demo/ui
+  html_file: status_page.html
+  json_file: status_state.json
+  text_file: status_screen.txt
+  title: 板端防腐专家状态页
+  refresh_seconds: 3
+  history_limit: 8
+
+vision:
+  enabled: true
+  backend: usb_v4l2
+  output_dir: /mnt/ssd/logs/spacemit_project/multimodal_demo/vision
+  keep_capture_artifacts: false
+
+  stream:
+    performance_mode: true
+    write_latest_capture: false
+    write_slot_images: false
+    generate_status_page: false
+    startup_skip_analysis_frames: 5
+    competition_analysis_interval_seconds: 1.0
+    busy_analysis_interval_seconds: 1.50
+    slow_analysis_threshold_seconds: 0.20
+    slow_analysis_cooldown_seconds: 0.25
+    voice_busy_stages:
+      - recording
+      - transcribing
+      - thinking
+      - speaking
+    voice_stage_intervals:
+      recording: 1.0
+      transcribing: 1.5
+      thinking: 2.5
+      speaking: 4.0
+    voice_pause_stages:
+      - transcribing
+      - thinking
+      - speaking
+
+  mipi:
+    detect_json_candidates:
+      - /usr/share/camera_json/csi3_camera_detect.json
+      - /usr/share/camera_json/csi1_camera_detect.json
+      - /usr/share/camera_json/csi2_camera_detect.json
+    auto_json_dir: /tmp
+    capture_tmp_dir: /tmp
+    capture_timeout_seconds: 45
+    prefer_sensor: imx219_spm
+
+  usb:
+    device: /dev/video0
+    auto_detect: true
+    preferred_device_patterns:
+      - icspring
+      - usb
+      - uvc
+    width: 1280
+    height: 720
+    pixel_format: MJPG
+    capture_timeout_seconds: 8
+
+  recognizer:
+    backend: corrosion_two_stage_rt
+    spacemit_vision_config: /mnt/ssd/spacemit_project/configs/vision_spacemit_corrosion_seg_1cls_v1.yaml
+    spacemit_model_path: ""
+    lazy_load: false
+    save_annotated_image: false
+    max_candidates: 3
+    options:
+      seg_score_threshold: 0.25
+      seg_iou_threshold: 0.45
+      max_detections: 3
+      max_display_tracks: 3
+      padding_ratio: 0.15
+      min_crop_size: 16
+      classify_top_k: 1
+      classification_cooldown_seconds: 3.0
+      classification_refresh_iou: 0.70
+      bootstrap_wait_seconds: 0.1
+      track_ttl_seconds: 2.0
+      track_match_iou: 0.35
+      max_pending_jobs: 1
+      cls_model_path: /mnt/ssd/models/vision/corrosion_two_stage/cls/yolov8n_cls_corrosion_3cls_v1.q.onnx
+      cls_labels_path: /mnt/ssd/spacemit_project/assets/labels/corrosion_cls_3cls.txt
+      cls_provider: CPUExecutionProvider
+      cls_cpu_threads: 1
+      eager_cls_session: true

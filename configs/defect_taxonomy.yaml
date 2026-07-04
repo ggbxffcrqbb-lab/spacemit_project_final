@@ -1,0 +1,54 @@
+version: 1
+task: detect
+
+bbox_classes:
+  - id: 0
+    name: rust_like_corrosion
+    zh_name: 锈蚀/腐蚀可视迹象
+    description: 可在单帧图像中直接看到的锈色、腐蚀斑、腐蚀蔓延等可视缺陷。
+    aliases:
+      - rust
+      - corrosion
+      - rust_spot
+      - oxidized_surface
+  - id: 1
+    name: coating_flaking_or_delamination
+    zh_name: 涂层剥落/分层
+    description: 包括起皮、边缘翘起、片状脱落、涂层分层和局部基材暴露。
+    aliases:
+      - flaking
+      - peeling
+      - delamination
+      - coating_failure
+  - id: 2
+    name: chalking_or_powdering
+    zh_name: 粉化/失光
+    description: 包括表层失光、粉化、粉末化、泛白或明显老化退化区域。
+    aliases:
+      - chalking
+      - powdering
+      - fading
+      - whitening
+
+image_level_tags:
+  - name: cui_risk_visual_hint
+    zh_name: CUI 风险线索
+    description: 用于标记保温层下腐蚀风险线索。它是图像级风险标签，不是首版边界框训练类别。
+  - name: not_target_surface
+    zh_name: 非目标表面
+    description: 画面不适合纳入缺陷训练，例如大量人物、天空、地面、工具或无关场景。
+  - name: uncertain
+    zh_name: 需人工复核
+    description: 画面难判、光照极端、反光严重或遮挡明显。
+
+annotation_rules:
+  bbox_policy:
+    - 仅框选可见缺陷区域，不把大面积完好背景一起框进去。
+    - 一个连续缺陷区域画一个框；明显分离的缺陷区域分别画框。
+    - 对模糊边界，宁可偏保守，不要过度扩大。
+  exclusion_policy:
+    - 不把 CUI 当作首版边界框类别。
+    - 不对人物、风筝、车辆等通用目标做缺陷框选，除非它们遮挡了待检查区域并需要标注为无效样本。
+  review_priority:
+    - 优先标注锈蚀、剥落/分层、粉化三类稳定可见缺陷。
+    - 第二阶段再扩展裂纹、鼓泡、针孔等更细粒度类别。

@@ -1,0 +1,22 @@
+<View>
+  <Header value="防腐缺陷标注（首版）"/>
+  <Text name="tips" value="仅标注可见缺陷区域；CUI 仅作为图像级标签，不作为首版框选类别。"/>
+  <Image name="image" value="$image" zoom="true" rotateControl="false"/>
+  <RectangleLabels name="bbox" toName="image">
+    <Label value="rust_like_corrosion" background="#C4512D"/>
+    <Label value="coating_flaking_or_delamination" background="#C98B2B"/>
+    <Label value="chalking_or_powdering" background="#B6B6B6"/>
+  </RectangleLabels>
+  <Choices name="image_tags" toName="image" showInLine="true">
+    <Choice value="cui_risk_visual_hint"/>
+    <Choice value="not_target_surface"/>
+    <Choice value="uncertain"/>
+  </Choices>
+  <TextArea
+    name="review_note"
+    toName="image"
+    editable="true"
+    perRegion="false"
+    rows="4"
+    placeholder="记录光照、材质、现场位置、误判原因等补充信息"/>
+</View>

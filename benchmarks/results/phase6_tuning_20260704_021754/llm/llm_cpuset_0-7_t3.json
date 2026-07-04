@@ -1,0 +1,78 @@
+{
+  "module": "llm",
+  "tag": "llm_cpuset_0-7_t3",
+  "config_path": "/mnt/ssd/spacemit_project/configs/multimodal_demo.yaml",
+  "process_affinity": "0-7",
+  "threads": 3,
+  "model": "qwen2.5:0.5b",
+  "warmup": false,
+  "warmup_wall_ms": null,
+  "ollama_processes": [
+    {
+      "pid": 1556,
+      "cmdline": "/usr/bin/ollama serve"
+    },
+    {
+      "pid": 107285,
+      "cmdline": "/usr/bin/ollama runner --model /usr/share/ollama/.ollama/models/blobs/sha256-3a8c81c78cc8ce6e7bf2bd34b87dd86ab9e929a1bb7ce907c41ee5014fdb4451 --ctx-size 2048 --batch-size 512 --threads 3 --no-mmap --parallel 2 --port 40779"
+    }
+  ],
+  "runs": [
+    {
+      "repeat": 1,
+      "prompt_index": 1,
+      "prompt": "请用一句中文说出钢管表面生锈后的第一步处理建议。",
+      "reply": "首先应该清除管道内部和外部的所有污垢和杂质，并确保没有铁屑等金属颗粒残留。",
+      "output_chars": 37,
+      "ttft_ms": 703.664,
+      "total_ms": 2997.674
+    },
+    {
+      "repeat": 1,
+      "prompt_index": 2,
+      "prompt": "如果现场看到钢管表面有锈蚀，给我一个保守、简短的建议。",
+      "reply": "可以考虑用钢刷或砂纸清除表面锈迹和污渍，并保持清洁。",
+      "output_chars": 26,
+      "ttft_ms": 742.433,
+      "total_ms": 2659.576
+    },
+    {
+      "repeat": 2,
+      "prompt_index": 1,
+      "prompt": "请用一句中文说出钢管表面生锈后的第一步处理建议。",
+      "reply": "首先应该清除管道内部和外部的所有污垢和杂质，并确保没有铁屑等金属颗粒残留。",
+      "output_chars": 37,
+      "ttft_ms": 551.477,
+      "total_ms": 2838.308
+    },
+    {
+      "repeat": 2,
+      "prompt_index": 2,
+      "prompt": "如果现场看到钢管表面有锈蚀，给我一个保守、简短的建议。",
+      "reply": "可以考虑用钢刷或砂纸清除表面锈迹和污渍，并保持清洁。",
+      "output_chars": 26,
+      "ttft_ms": 617.353,
+      "total_ms": 2568.942
+    }
+  ],
+  "summary": {
+    "ttft_ms": {
+      "min": 551.477,
+      "max": 742.433,
+      "mean": 653.732,
+      "median": 660.508
+    },
+    "total_ms": {
+      "min": 2568.942,
+      "max": 2997.674,
+      "mean": 2766.125,
+      "median": 2748.942
+    },
+    "output_chars": {
+      "min": 26.0,
+      "max": 37.0,
+      "mean": 31.5,
+      "median": 31.5
+    }
+  }
+}

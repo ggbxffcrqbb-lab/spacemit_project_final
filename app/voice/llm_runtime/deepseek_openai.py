@@ -14,6 +14,7 @@ DEFAULT_SYSTEM_PROMPT = os.getenv(
 DEFAULT_MAX_TOKENS = int(os.getenv("SPACEMIT_MAX_TOKENS", "32"))
 DEFAULT_TEMPERATURE = float(os.getenv("SPACEMIT_TEMPERATURE", "0"))
 DEFAULT_CONTEXT = int(os.getenv("SPACEMIT_NUM_CTX", "1024"))
+DEFAULT_NUM_THREAD = int(os.getenv("SPACEMIT_NUM_THREAD", "0"))
 DEFAULT_KEEP_ALIVE = os.getenv("SPACEMIT_KEEP_ALIVE", "30m")
 DEFAULT_TIMEOUT = int(os.getenv("SPACEMIT_LLM_TIMEOUT", "300"))
 DEFAULT_MAX_CHARS = int(os.getenv("SPACEMIT_MAX_CHARS", "28"))
@@ -69,18 +70,47 @@ class ThinkTagFilter:
 
 
 class LlmModel:
-    def __init__(self, model_path=None):
-        self._model = model_path or DEFAULT_MODEL
-        self._api_url = DEFAULT_API_URL
-        self._system_prompt = DEFAULT_SYSTEM_PROMPT
-        self._max_tokens = DEFAULT_MAX_TOKENS
-        self._temperature = DEFAULT_TEMPERATURE
-        self._num_ctx = DEFAULT_CONTEXT
-        self._keep_alive = DEFAULT_KEEP_ALIVE
-        self._timeout = DEFAULT_TIMEOUT
-        self._max_chars = DEFAULT_MAX_CHARS
-        self._min_chars = DEFAULT_MIN_CHARS
-        self._stop_after_first_sentence = STOP_AFTER_FIRST_SENTENCE
+    def __init__(
+        self,
+        model_path=None,
+        *,
+        system_prompt=None,
+        max_chars=None,
+        min_chars=None,
+        stop_after_first_sentence=None,
+        num_thread=None,
+    ):
+        self._model = model_path or os.getenv("SPACEMIT_LLM_MODEL", DEFAULT_MODEL)
+        self._api_url = os.getenv("SPACEMIT_OLLAMA_API", DEFAULT_API_URL)
+        self._system_prompt = system_prompt or os.getenv(
+            "SPACEMIT_SYSTEM_PROMPT",
+            DEFAULT_SYSTEM_PROMPT,
+        )
+        self._max_tokens = int(os.getenv("SPACEMIT_MAX_TOKENS", str(DEFAULT_MAX_TOKENS)))
+        self._temperature = float(os.getenv("SPACEMIT_TEMPERATURE", str(DEFAULT_TEMPERATURE)))
+        self._num_ctx = int(os.getenv("SPACEMIT_NUM_CTX", str(DEFAULT_CONTEXT)))
+        self._num_thread = (
+            int(os.getenv("SPACEMIT_NUM_THREAD", str(DEFAULT_NUM_THREAD)))
+            if num_thread is None
+            else int(num_thread)
+        )
+        self._keep_alive = os.getenv("SPACEMIT_KEEP_ALIVE", DEFAULT_KEEP_ALIVE)
+        self._timeout = int(os.getenv("SPACEMIT_LLM_TIMEOUT", str(DEFAULT_TIMEOUT)))
+        self._max_chars = (
+            int(os.getenv("SPACEMIT_MAX_CHARS", str(DEFAULT_MAX_CHARS)))
+            if max_chars is None
+            else int(max_chars)
+        )
+        self._min_chars = (
+            int(os.getenv("SPACEMIT_MIN_CHARS", str(DEFAULT_MIN_CHARS)))
+            if min_chars is None
+            else int(min_chars)
+        )
+        self._stop_after_first_sentence = (
+            os.getenv("SPACEMIT_STOP_AFTER_FIRST_SENTENCE", "1") == "1"
+            if stop_after_first_sentence is None
+            else bool(stop_after_first_sentence)
+        )
 
     def _clip_visible_chunk(self, current_text, new_text):
         combined = current_text + new_text
@@ -103,6 +133,13 @@ class LlmModel:
         return clipped[len(current_text):], True
 
     def _payload(self, text):
+        options = {
+            "num_predict": self._max_tokens,
+            "temperature": self._temperature,
+            "num_ctx": self._num_ctx,
+        }
+        if self._num_thread > 0:
+            options["num_thread"] = self._num_thread
         return {
             "model": self._model,
             "messages": [
@@ -117,11 +154,7 @@ class LlmModel:
             ],
             "stream": True,
             "keep_alive": self._keep_alive,
-            "options": {
-                "num_predict": self._max_tokens,
-                "temperature": self._temperature,
-                "num_ctx": self._num_ctx,
-            },
+            "options": options,
         }
 
     def generate(self, text):

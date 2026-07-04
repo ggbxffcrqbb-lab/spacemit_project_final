@@ -25,3 +25,16 @@ data/index/*.tmp
 
 .DS_Store
 Thumbs.db
+
+# Board-generated shader caches and ad-hoc backups
+.shaders/
+*.bak_
+*.bak_*
+
+# Local external dependency worktrees / build backups
+third_party/model-zoo-tts/build_backup_*/
+third_party/model-zoo-vision/
+third_party/onnxruntime-extensions/
+
+# Misc accidental local artifacts
+不是一个 tty

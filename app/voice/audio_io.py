@@ -52,13 +52,17 @@ class ConsoleAudioRecorder:
         self.channels = channels
         self.dtype = dtype
 
-    def record_once(self) -> str:
-        print("Press Enter to start recording, q and Enter to exit.")
-        s = input()
-        if s == "q":
-            return ""
+    def record_once(self, auto_start: bool = False) -> str:
+        if not auto_start:
+            print("Press Enter to start recording, q and Enter to exit.")
+            s = input()
+            if s == "q":
+                return ""
+        else:
+            print("Recording started. Press Enter to stop, q and Enter to exit.")
 
-        print("Recording... Press Enter again to stop, q and Enter to exit.")
+        if not auto_start:
+            print("Recording... Press Enter again to stop, q and Enter to exit.")
         temp_wav_file = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
         temp_wav_path = temp_wav_file.name
         frames = []

@@ -1,0 +1,3 @@
+rust_like_corrosion
+coating_flaking_or_delamination
+chalking_or_powdering

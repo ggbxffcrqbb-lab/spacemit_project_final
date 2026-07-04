@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "/mnt/ssd/spacemit_project/benchmarks/phase6_module_bench.py", line 16, in <module>
+    from app.core.config import load_app_config
+ModuleNotFoundError: No module named 'app'

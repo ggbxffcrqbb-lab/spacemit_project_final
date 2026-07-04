@@ -10,9 +10,10 @@ if hasattr(sys.stdout, "reconfigure"):
 
 from app.core.config import load_app_config
 from app.rag import LocalKnowledgeBase
+from app.rag.query_guard import contains_domain_signal, filter_strong_hits
 
 
-QUERIES = [
+POSITIVE_QUERIES = [
     "涂层起泡怎么判断先补漆还是先复核",
     "发现裂纹能不能先补漆遮住",
     "储罐外壁腐蚀如何初判风险",
@@ -55,6 +56,33 @@ QUERIES = [
     "动火前刚测过气还要不要复测",
     "只进去拍个照也要做受限空间检测吗",
     "发现多点异常什么时候要升级到系统性复核",
+    "埋地管道防腐层破了是不是一定要马上开挖",
+    "阴极保护电位偏低先查电源还是先查涂层",
+    "管道支架根部反复返锈一般先怀疑什么",
+    "法兰附近老是有锈迹先看密封还是先看防腐",
+    "保温层接口发黑发潮是不是要怀疑 CUI",
+    "输油管线外壁局部鼓包先停运还是先复核",
+    "发现杂散电流干扰时现场先做什么",
+    "阀门底部和低点部位为什么更容易先出问题",
+    "浪溅区起泡为什么比普通外壁更危险",
+    "海上平台栏杆焊缝边缘返锈先看哪一项",
+    "盐雾环境下掉漆很快通常说明什么",
+    "海工钢结构只补面漆为什么往往不够",
+    "海边支架有保温又返锈先拆保温还是先拍照记录",
+    "牺牲阳极看着还在为什么结构还是会锈",
+    "海上风电塔筒门口掉漆为什么要优先复核",
+    "潮差区和全浸区的腐蚀关注点有什么不同",
+    "这像起泡还是像附着力失效",
+    "锈线从焊缝边上出来一般说明什么",
+]
+
+NEGATIVE_QUERIES = [
+    "今天天气怎么样",
+    "帮我写一封请假邮件",
+    "这个项目的git怎么提交",
+    "摄像头分辨率是多少",
+    "怎么做红烧肉",
+    "帮我写个自我介绍",
 ]
 
 
@@ -74,7 +102,7 @@ def main():
     kb = build_knowledge_base()
 
     hit_count = 0
-    for index, query in enumerate(QUERIES, start=1):
+    for index, query in enumerate(POSITIVE_QUERIES, start=1):
         hits = kb.search(query, top_k=3)
         if hits:
             hit_count += 1
@@ -85,7 +113,25 @@ def main():
         else:
             print(f"[{index:02d}] MISS | {query}")
 
-    print(f"summary: {hit_count}/{len(QUERIES)} queries returned hits")
+    negative_pass_count = 0
+    base_index = len(POSITIVE_QUERIES)
+    for offset, query in enumerate(NEGATIVE_QUERIES, start=1):
+        hits = kb.search(query, top_k=3)
+        strong_hits = filter_strong_hits(query, hits)
+        if not contains_domain_signal(query) and not strong_hits:
+            negative_pass_count += 1
+            print(f"[{base_index + offset:02d}] PASS | {query} | fallback_expected")
+        else:
+            top = strong_hits[0] if strong_hits else hits[0]
+            print(
+                f"[{base_index + offset:02d}] FAIL | {query} | "
+                f"{top.title} | {Path(top.source_path).name} | score={top.score}"
+            )
+
+    print(
+        f"summary: positive={hit_count}/{len(POSITIVE_QUERIES)} hits | "
+        f"negative={negative_pass_count}/{len(NEGATIVE_QUERIES)} guarded"
+    )
 
 
 if __name__ == "__main__":

@@ -1,4 +1,5 @@
 # -*- encoding: utf-8 -*-
+import os
 import re
 import yaml
 import jieba
@@ -158,14 +159,21 @@ class OrtInferSession:
         cpu_provider_options = {
             "arena_extend_strategy": "kSameAsRequested",
         }
+        requested_provider = str(os.getenv("SPACEMIT_ASR_PROVIDER", "")).strip()
+        available_providers = list(get_available_providers())
 
         EP_list = []
         if device_id != "-1" and get_device() == "GPU" and cuda_ep in get_available_providers():
             EP_list = [(cuda_ep, cuda_provider_options)]
+        if requested_provider and requested_provider in available_providers:
+            EP_list.append((requested_provider, {}))
         EP_list.append((cpu_ep, cpu_provider_options))
 
         self._verify_model(model_file)
+        self.available_providers = available_providers
+        self.requested_providers = [item[0] for item in EP_list]
         self.session = InferenceSession(model_file, sess_options=sess_opt, providers=EP_list)
+        self.session_providers = list(self.session.get_providers())
 
         if device_id != "-1" and cuda_ep not in self.session.get_providers():
             warnings.warn(

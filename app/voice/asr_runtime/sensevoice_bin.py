@@ -21,6 +21,31 @@ from .tokenizer import Tokenizer
 from .frontend import WavFrontend
 
 
+def _resolve_ortextensions_path() -> str:
+    env_path = os.getenv("SPACEMIT_ORTEXT_PATH", "").strip()
+    if env_path and Path(env_path).exists():
+        return env_path
+
+    project_root = Path(__file__).resolve().parents[3]
+    candidate_dir = (
+        project_root
+        / "third_party"
+        / "onnxruntime-extensions"
+        / "onnxruntime_extensions"
+    )
+    for pattern in ("_extensions_pydll*.so", "libortextensions.so*", "ortextensions.so*"):
+        matches = sorted(candidate_dir.glob(pattern))
+        if matches:
+            return str(matches[0])
+
+    try:
+        from onnxruntime_extensions import get_library_path  # type: ignore
+
+        return str(get_library_path())
+    except Exception:
+        return "libortextensions.so.0"
+
+
 class SenseVoiceSmall:
     def __init__(
         self,
@@ -41,7 +66,7 @@ class SenseVoiceSmall:
         config_file = os.path.join(model_dir, "config.yaml")
         cmvn_file = os.path.join(model_dir, "am.mvn")
         config = read_yaml(config_file)
-        ortext_path = "libortextensions.so.0"
+        ortext_path = _resolve_ortextensions_path()
         decode_model_path = os.path.join(model_dir, "sensevoice_decoder_model.onnx")
         self.tokenizer = Tokenizer(
             ortext_path,
@@ -233,4 +258,8 @@ class SenseVoiceSmall:
             "model_file": self.model_file,
             "prefer_optimized_model": self.prefer_optimized_model,
             "using_optimized_model": self.using_optimized_model,
+            "ortextensions_path": _resolve_ortextensions_path(),
+            "available_providers": list(getattr(self.ort_infer, "available_providers", [])),
+            "requested_providers": list(getattr(self.ort_infer, "requested_providers", [])),
+            "session_providers": list(getattr(self.ort_infer, "session_providers", [])),
         }

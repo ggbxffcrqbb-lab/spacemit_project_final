@@ -1,0 +1,80 @@
+SpaceMIT EP initialized: /mnt/ssd/models/vision/corrosion_two_stage/seg/yolov8n_seg_corrosion_1cls_v1.q.onnx
+[VisionService][Timing][Image][generic] preprocess=5.65137ms, model_infer=135.29ms, postprocess=1.62049ms, total=142.579ms
+[VisionService][Timing][Image][generic] preprocess=13.8189ms, model_infer=26.7467ms, postprocess=18.6363ms, total=59.224ms
+[VisionService][Timing][Image][generic] preprocess=4.90897ms, model_infer=30.9258ms, postprocess=17.1286ms, total=52.9827ms
+[VisionService][Timing][Image][generic] preprocess=5.27777ms, model_infer=25.6035ms, postprocess=16.951ms, total=47.8528ms
+[VisionService][Timing][Image][generic] preprocess=4.20167ms, model_infer=48.2613ms, postprocess=17.284ms, total=69.7732ms
+[VisionService][Timing][Image][generic] preprocess=3.25757ms, model_infer=45.1387ms, postprocess=17.2062ms, total=65.622ms
+{
+  "module": "vision",
+  "tag": "visioncls_cpuset_0-7_seg4_cls3",
+  "config_path": "/mnt/ssd/spacemit_project/configs/multimodal_demo.yaml",
+  "process_affinity": "0-3",
+  "backend": "corrosion_two_stage_rt",
+  "image_path": "/mnt/ssd/data/vision/corrosion_two_stage/samples/seg_val_sample.jpg",
+  "seg_threads": 4,
+  "cls_threads": 3,
+  "init_wall_ms": 988.119,
+  "runs": [
+    {
+      "run": 1,
+      "wall_ms": 3740.933,
+      "seg_infer_ms": 60.962,
+      "candidate_count": 3,
+      "top_label": "corrosion",
+      "top_score": 0.5549549460411072
+    },
+    {
+      "run": 2,
+      "wall_ms": 215.061,
+      "seg_infer_ms": 54.798,
+      "candidate_count": 3,
+      "top_label": "corrosion",
+      "top_score": 0.5549549460411072
+    },
+    {
+      "run": 3,
+      "wall_ms": 109.077,
+      "seg_infer_ms": 51.551,
+      "candidate_count": 3,
+      "top_label": "crevice_corrosion",
+      "top_score": 0.638846218585968
+    },
+    {
+      "run": 4,
+      "wall_ms": 130.605,
+      "seg_infer_ms": 71.526,
+      "candidate_count": 3,
+      "top_label": "crevice_corrosion",
+      "top_score": 0.638846218585968
+    },
+    {
+      "run": 5,
+      "wall_ms": 124.861,
+      "seg_infer_ms": 67.32,
+      "candidate_count": 3,
+      "top_label": "crevice_corrosion",
+      "top_score": 0.638846218585968
+    }
+  ],
+  "summary": {
+    "wall_ms": {
+      "min": 109.077,
+      "max": 3740.933,
+      "mean": 864.107,
+      "median": 130.605
+    },
+    "seg_infer_ms": {
+      "min": 51.551,
+      "max": 71.526,
+      "mean": 61.231,
+      "median": 60.962
+    },
+    "candidate_count": {
+      "min": 3.0,
+      "max": 3.0,
+      "mean": 3.0,
+      "median": 3.0
+    }
+  }
+}

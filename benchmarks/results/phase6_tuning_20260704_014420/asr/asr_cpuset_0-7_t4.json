@@ -1,0 +1,44 @@
+{
+  "module": "asr",
+  "tag": "asr_cpuset_0-7_t4",
+  "config_path": "/mnt/ssd/spacemit_project/configs/multimodal_demo.yaml",
+  "process_affinity": "0-7",
+  "threads": 4,
+  "audio_path": "/mnt/ssd/spacemit_project/benchmarks/assets/asr_steel_pipe_rust.wav",
+  "audio_seconds": 6.666375,
+  "init_wall_ms": 28778.653,
+  "runs": [
+    {
+      "run": 1,
+      "wall_ms": 4074.121,
+      "text_chars": 8,
+      "text": "钢管生锈了怎么办"
+    },
+    {
+      "run": 2,
+      "wall_ms": 3475.441,
+      "text_chars": 8,
+      "text": "钢管生锈了怎么办"
+    },
+    {
+      "run": 3,
+      "wall_ms": 3582.306,
+      "text_chars": 8,
+      "text": "钢管生锈了怎么办"
+    }
+  ],
+  "summary": {
+    "wall_ms": {
+      "min": 3475.441,
+      "max": 4074.121,
+      "mean": 3710.623,
+      "median": 3582.306
+    },
+    "text_chars": {
+      "min": 8.0,
+      "max": 8.0,
+      "mean": 8.0,
+      "median": 8.0
+    }
+  }
+}

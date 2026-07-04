@@ -1,4 +1,4 @@
-project:
+﻿project:
   name: spacemit_project
   root_dir: /mnt/ssd/spacemit_project
   models_dir: /mnt/ssd/models
@@ -16,9 +16,9 @@ voice:
   playback_volume: 120%
   playback_sample_rate: 48000
   playback_channels: 2
-  segment_max_chars: 28
-  segment_min_chars: 10
-  prewarm_llm: true
+  segment_max_chars: 18
+  segment_min_chars: 6
+  prewarm_llm: false
   prewarm_tts: true
 
   asr:
@@ -30,11 +30,14 @@ voice:
     intra_op_num_threads: 2
 
   llm:
-    model: qwen2.5:0.5b
+    model: deepseek-r1:1.5b-local
     api_url: http://127.0.0.1:11434/api/chat
     system_prompt: >
-      你是一个运行在 Muse Pi Pro 板端的离线防腐专家助手。请直接使用中文回答，
-      不暴露思维链，不使用项目符号，优先给出保守、清晰、可执行的初判建议。
+      你是运行在 Muse Pi Pro 板端的离线防腐专家助手。
+      请直接使用中文回答，不暴露思维链，不使用项目符号。
+      回答要像现场同事口头交流，先直接回答用户最关心的点，再补一句下一步建议。
+      语气自然，不要生硬照搬知识卡原句，优先给出保守、清晰、可执行的初步建议。
+      如果用户问的是非防腐领域的日常通用问题，也可以按普通中文助手简短作答，不要直接拒答。
     max_tokens: 56
     temperature: 0.0
     num_ctx: 1024
@@ -43,15 +46,14 @@ voice:
     max_chars: 56
     min_chars: 10
     stop_after_first_sentence: true
-    warmup_prompt: 请只用一个中文词语回答“收到”。
-
+    warmup_prompt: 璇峰彧鐢ㄤ竴涓腑鏂囪瘝璇洖绛斺€滄敹鍒扳€濄€?
   tts:
     matcha_root: /mnt/ssd/spacemit_project/third_party/model-zoo-tts
     model_dir: /mnt/ssd/models/tts/matcha-tts
     provider: cpu
     default_preset: matcha_zh
     mixed_preset: matcha_zh_en
-    chinese_mode: quality
+    chinese_mode: fast
     speed: 1.0
     volume: 100
     threads: 4
@@ -59,7 +61,7 @@ voice:
     allow_cpu_fallback: true
     preload_mixed_engine: false
     warmup_text_zh: 你好。
-    warmup_text_mixed: 今天学Python。
+    warmup_text_mixed: 今天学习 Python。
     keep_tts_wav: false
     trace_init: false
 
@@ -80,6 +82,37 @@ ui:
   html_file: status_page.html
   json_file: status_state.json
   text_file: status_screen.txt
-  title: 板端防腐专家状态页
+  title: 鏉跨闃茶厫涓撳鐘舵€侀〉
   refresh_seconds: 3
   history_limit: 6
+
+vision:
+  enabled: true
+  backend: mipi_official
+  output_dir: /mnt/ssd/logs/spacemit_project/vision
+  keep_capture_artifacts: false
+
+  mipi:
+    detect_json_candidates:
+      - /usr/share/camera_json/csi3_camera_detect.json
+      - /usr/share/camera_json/csi1_camera_detect.json
+      - /usr/share/camera_json/csi2_camera_detect.json
+    auto_json_dir: /tmp
+    capture_tmp_dir: /tmp
+    capture_timeout_seconds: 45
+    prefer_sensor: imx219_spm
+
+  usb:
+    device: /dev/video0
+    width: 1280
+    height: 720
+    pixel_format: MJPG
+    capture_timeout_seconds: 8
+
+  recognizer:
+    backend: spacemit_vision
+    spacemit_vision_config: /mnt/ssd/spacemit_project/configs/vision_spacemit_yolov8.yaml
+    spacemit_model_path: ""
+    lazy_load: false
+    save_annotated_image: true
+    max_candidates: 3

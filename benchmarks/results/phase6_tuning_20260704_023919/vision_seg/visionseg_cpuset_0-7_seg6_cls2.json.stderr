@@ -1,0 +1,22 @@
+Traceback (most recent call last):
+  File "/mnt/ssd/spacemit_project/benchmarks/phase6_module_bench.py", line 373, in <module>
+    main()
+  File "/mnt/ssd/spacemit_project/benchmarks/phase6_module_bench.py", line 364, in main
+    payload = _benchmark_vision(args)
+              ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/ssd/spacemit_project/benchmarks/phase6_module_bench.py", line 265, in _benchmark_vision
+    result = recognizer.analyze(image_path)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/ssd/spacemit_project/app/vision/recognizer.py", line 43, in analyze
+    return self.analyze_rgb(rgb, image_path, annotated_output_path)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/ssd/spacemit_project/app/vision/recognizer.py", line 256, in analyze_rgb
+    seg_service = self._ensure_seg_service()
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/ssd/spacemit_project/app/vision/recognizer.py", line 336, in _ensure_seg_service
+    self._seg_service = VisionServiceNative.create(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/ssd/spacemit_project/.venv/lib/python3.12/site-packages/spacemit_vision/vision_service_native.py", line 136, in create
+    impl = _ext.VisionService.create(config_path, model_path_override, lazy_load)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: Not enough available AI cores for the thread pool: required 6, available 4.
