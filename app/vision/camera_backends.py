@@ -148,12 +148,20 @@ class OfficialMipiGstFrameStream(CameraFrameStream):
         *,
         auto_json: Path,
         sensor: str,
+        show_preview: bool = False,
         autostart: bool = True,
     ):
         self.backend = backend
         self.logger = logging.getLogger("app.vision.camera.mipi_official.stream")
         self.auto_json = auto_json
         self.sensor = sensor
+        self.show_preview = bool(show_preview)
+        self._source_width = 1920
+        self._source_height = 1080
+        self._preview_width, self._preview_height = self._compute_preview_size(
+            self._source_width,
+            self._source_height,
+        )
         self.frame_index = 0
         self._started = False
         self._gst = self._load_gst()
@@ -161,11 +169,16 @@ class OfficialMipiGstFrameStream(CameraFrameStream):
         self._sink = self._pipeline.get_by_name("appsink0")
         self._preview_sink = self._pipeline.get_by_name("previewsink0")
         self._preview_widget = None
+        self._overlay_boxes: list[dict] = []
+        self._overlay_lock = threading.Lock()
+        self._cairo_overlay = self._pipeline.get_by_name("cairooverlay0")
         if self._preview_sink is not None:
             try:
                 self._preview_widget = self._preview_sink.get_property("widget")
             except Exception:
                 self._preview_widget = None
+        if self._cairo_overlay is not None:
+            self._cairo_overlay.connect("draw", self._on_cairo_draw)
         if self._sink is None:
             raise RuntimeError("GStreamer appsink 初始化失败")
         self._bus = self._pipeline.get_bus()
@@ -198,8 +211,10 @@ class OfficialMipiGstFrameStream(CameraFrameStream):
         finally:
             buffer.unmap(info)
 
+        save_path = output_path
         output_path = output_path or self.backend._default_output_path(".png")
-        save_rgb_image(rgb, output_path)
+        if save_path is not None:
+            save_rgb_image(rgb, output_path)
         self.frame_index += 1
         return CapturedFrame(
             backend=self.backend.backend_name,
@@ -226,11 +241,14 @@ class OfficialMipiGstFrameStream(CameraFrameStream):
             boxes = list(self._overlay_boxes)
         if not boxes:
             return
+        scale_x = self._preview_width / max(1, self._source_width)
+        scale_y = self._preview_height / max(1, self._source_height)
+        font_size = max(12, int(round(16 * min(scale_x, scale_y))))
         for box in boxes:
-            x1 = int(box.get("x1", 0))
-            y1 = int(box.get("y1", 0))
-            x2 = int(box.get("x2", 0))
-            y2 = int(box.get("y2", 0))
+            x1 = int(round(float(box.get("x1", 0)) * scale_x))
+            y1 = int(round(float(box.get("y1", 0)) * scale_y))
+            x2 = int(round(float(box.get("x2", 0)) * scale_x))
+            y2 = int(round(float(box.get("y2", 0)) * scale_y))
             if x2 <= x1 or y2 <= y1:
                 continue
             cr.set_source_rgba(0.0, 1.0, 0.0, 0.85)
@@ -240,7 +258,7 @@ class OfficialMipiGstFrameStream(CameraFrameStream):
             label = str(box.get("label", ""))
             if label:
                 try:
-                    cr.set_font_size(16)
+                    cr.set_font_size(font_size)
                     extents = cr.text_extents(label)
                     pad = 4
                     cr.set_source_rgba(0.0, 0.0, 0.0, 0.75)
@@ -257,17 +275,78 @@ class OfficialMipiGstFrameStream(CameraFrameStream):
         self._pipeline.set_state(self._gst.State.NULL)
 
     def _build_pipeline(self):
-        return self._gst.parse_launch(
-            " ".join(
+        if self.show_preview:
+            pipeline = " ".join(
                 [
                     "spacemitsrc",
                     f"location={self.auto_json}",
                     "close-dmabuf=1",
-                    "drop-frames=1",
+                    "drop-frames=0",
                     "num-capture-buffers=4",
                     "timeout=500",
                     "!",
-                    "video/x-raw,format=NV12,width=1920,height=1080,framerate=30/1",
+                    (
+                        "video/x-raw,format=NV12,"
+                        f"width={self._source_width},height={self._source_height},framerate=30/1"
+                    ),
+                    "!",
+                    "tee",
+                    "name=t",
+                    "t.",
+                    "!",
+                    "queue",
+                    "leaky=downstream",
+                    "max-size-buffers=2",
+                    "max-size-bytes=0",
+                    "max-size-time=0",
+                    "!",
+                    "appsink",
+                    "name=appsink0",
+                    "emit-signals=false",
+                    "sync=false",
+                    "drop=true",
+                    "max-buffers=1",
+                    "wait-on-eos=false",
+                    "t.",
+                    "!",
+                    "queue",
+                    "leaky=downstream",
+                    "max-size-buffers=2",
+                    "max-size-bytes=0",
+                    "max-size-time=0",
+                    "!",
+                    "videoscale",
+                    "!",
+                    (
+                        "video/x-raw,format=NV12,"
+                        f"width={self._preview_width},height={self._preview_height}"
+                    ),
+                    "!",
+                    "videoconvert",
+                    "!",
+                    "cairooverlay",
+                    "name=cairooverlay0",
+                    "!",
+                    "gtkwaylandsink",
+                    "name=previewsink0",
+                    "sync=false",
+                    "qos=false",
+                ]
+            )
+        else:
+            pipeline = " ".join(
+                [
+                    "spacemitsrc",
+                    f"location={self.auto_json}",
+                    "close-dmabuf=1",
+                    "drop-frames=0",
+                    "num-capture-buffers=4",
+                    "timeout=500",
+                    "!",
+                    (
+                        "video/x-raw,format=NV12,"
+                        f"width={self._source_width},height={self._source_height},framerate=30/1"
+                    ),
                     "!",
                     "appsink",
                     "name=appsink0",
@@ -278,7 +357,7 @@ class OfficialMipiGstFrameStream(CameraFrameStream):
                     "wait-on-eos=false",
                 ]
             )
-        )
+        return self._gst.parse_launch(pipeline)
 
     def _pull_sample(self, timeout_seconds: int):
         deadline = time.monotonic() + timeout_seconds
@@ -315,6 +394,21 @@ class OfficialMipiGstFrameStream(CameraFrameStream):
         return max(width, stride)
 
     @staticmethod
+    def _compute_preview_size(
+        width: int,
+        height: int,
+        *,
+        max_width: int = 1280,
+        max_height: int = 720,
+    ) -> tuple[int, int]:
+        if width <= 0 or height <= 0:
+            return max_width, max_height
+        scale = min(max_width / width, max_height / height, 1.0)
+        preview_width = max(1, int(round(width * scale)))
+        preview_height = max(1, int(round(height * scale)))
+        return preview_width, preview_height
+
+    @staticmethod
     def _load_gst():
         import gi
 
@@ -341,6 +435,7 @@ class OfficialMipiCameraBackend(CameraBackend):
             self,
             auto_json=Path(str(probe.details["auto_json"])),
             sensor=str(probe.details.get("sensor", "")),
+            show_preview=show_preview or embed_preview,
             autostart=not embed_preview,
         )
 

@@ -6,6 +6,7 @@ import os
 import queue
 import threading
 import time
+import tempfile
 from pathlib import Path
 
 try:
@@ -16,6 +17,7 @@ except ImportError:
 import cv2
 import numpy as np
 import onnxruntime as ort
+import yaml
 from PIL import Image, ImageDraw, ImageFont
 
 from app.core.cpu_affinity import affinity_scope, bind_current_thread
@@ -50,6 +52,9 @@ class DefectRecognizer(abc.ABC):
         annotated_output_path: Path | None = None,
     ) -> VisionAnalysisResult:
         raise NotImplementedError
+
+    def close(self) -> None:
+        return
 
 
 class HeuristicDefectRecognizer(DefectRecognizer):
@@ -153,6 +158,9 @@ class SpacemitVisionRecognizer(DefectRecognizer):
             self.config.recognizer.lazy_load, True, False,
         )
         return self._service
+
+    def close(self) -> None:
+        self._service = None
 
     @staticmethod
     def _build_raw_candidates(results, class_names):
@@ -310,6 +318,10 @@ class CorrosionTwoStageRealtimeRecognizer(DefectRecognizer):
     def _default_annotated_path(self, image_path: Path) -> Path:
         return self.config.output_dir / "annotated" / f"{image_path.stem}_corrosion_two_stage_rt.png"
 
+    def close(self) -> None:
+        self._seg_service = None
+        self._cls_session = None
+
     def _ensure_worker(self) -> None:
         if self._worker_started:
             return
@@ -333,12 +345,52 @@ class CorrosionTwoStageRealtimeRecognizer(DefectRecognizer):
             from spacemit_vision import VisionServiceNative
         except ImportError as exc:
             raise RuntimeError("spacemit_vision not installed") from exc
-        self._seg_service = VisionServiceNative.create(
-            str(self._seg_config),
-            model_path_override=self._seg_model_override,
-        )
+        try:
+            self._seg_service = VisionServiceNative.create(
+                str(self._seg_config),
+                model_path_override=self._seg_model_override,
+            )
+        except Exception as exc:
+            if not self._should_retry_seg_with_cpu(exc):
+                raise
+            fallback_config = self._build_seg_cpu_fallback_config()
+            self.logger.warning(
+                "segmentation service failed with primary provider, retrying CPU fallback: %s",
+                exc,
+            )
+            self._seg_service = VisionServiceNative.create(
+                str(fallback_config),
+                model_path_override=self._seg_model_override,
+            )
         self._warmup_seg_service()
         return self._seg_service
+
+    @staticmethod
+    def _should_retry_seg_with_cpu(exc: Exception) -> bool:
+        message = str(exc)
+        markers = (
+            "Not enough available AI cores",
+            "thread pool",
+            "AI cores",
+        )
+        return any(marker in message for marker in markers)
+
+    def _build_seg_cpu_fallback_config(self) -> Path:
+        raw = yaml.safe_load(self._seg_config.read_text(encoding="utf-8")) or {}
+        params = dict(raw.get("default_params", {}) or {})
+        params["providers"] = ["CPUExecutionProvider"]
+        params["num_threads"] = min(int(params.get("num_threads", 2) or 2), 2)
+        raw["default_params"] = params
+        temp_file = tempfile.NamedTemporaryFile(
+            delete=False,
+            suffix=".yaml",
+            prefix="spacemit_seg_cpu_fallback_",
+            mode="w",
+            encoding="utf-8",
+        )
+        with temp_file:
+            yaml.safe_dump(raw, temp_file, allow_unicode=True, sort_keys=False)
+        return Path(temp_file.name)
 
     def _ensure_cls_session(self) -> ort.InferenceSession:
         if self._cls_session is not None:

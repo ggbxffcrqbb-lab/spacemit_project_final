@@ -26,6 +26,11 @@ PROJECT_LABEL_COPY = {
     "cui_risk_visual_hint": ("保温层下腐蚀风险提示", "CUI Risk Hint"),
 }
 
+JUDGING_DIMENSIONS = (
+    "推理与交互: 图像推理 / TTFT / 唤醒自然 / 切换顺滑",
+    "资源与稳定: 板端离线 / CPU NPU内存可控 / 长时运行稳定",
+)
+
 
 class CompetitionDisplay:
     WINDOW_NAME = "Phase 6 Multimodal Demo"
@@ -59,6 +64,10 @@ class CompetitionDisplay:
         self._video_panel_pil: Image.Image | None = None
         self._right_panel_pil: Image.Image | None = None
         self._bottom_panel_pil: Image.Image | None = None
+        self._video_panel_bg = None
+        self._video_panel_bg_size = None
+        self._last_top_bar_update_sec: int = -1
+        self._last_snapshot_write: float = 0.0
 
     def attach_video_widget(self, widget) -> None:
         self._video_widget = widget
@@ -67,7 +76,7 @@ class CompetitionDisplay:
         if self._window_ready:
             return
         screen = Gdk.Screen.get_default()
-        visual = screen.get_rgba_visual()
+        visual = screen.get_rgba_visual() if screen is not None else None
         self._window = Gtk.Window(title=self.WINDOW_NAME)
         if visual is not None:
             self._window.set_visual(visual)
@@ -81,17 +90,24 @@ class CompetitionDisplay:
         self._window.set_app_paintable(True)
 
         provider = Gtk.CssProvider()
-        provider.load_from_data(b"""
+        provider.load_from_data(
+            b"""
             window {
-              background: transparent;
+              background: #07111a;
             }
             .transparent-bg {
-              background: transparent;
+              background: #07111a;
             }
-        """)
+        """
+        )
         style_ctx = self._window.get_style_context()
         style_ctx.add_provider(provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
-        Gtk.StyleContext.add_provider_for_screen(screen, provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        if screen is not None:
+            Gtk.StyleContext.add_provider_for_screen(
+                screen,
+                provider,
+                Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
+            )
 
         self._top_image = Gtk.Image()
         self._video_image = Gtk.Image()
@@ -142,8 +158,7 @@ class CompetitionDisplay:
 
         content = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=self._layout["gap"])
         spacer = Gtk.Box()
-        spacer_ctx = spacer.get_style_context()
-        spacer_ctx.add_class("transparent-bg")
+        spacer.get_style_context().add_class("transparent-bg")
         content.pack_start(spacer, True, True, 0)
         content.pack_start(self._right_image, False, False, 0)
 
@@ -152,19 +167,12 @@ class CompetitionDisplay:
         ui_root.pack_start(self._bottom_image, False, False, 0)
 
         overlay.add_overlay(ui_root)
-
         self._window.show_all()
         self._set_video_fixed_visible(self._video_widget is None)
         self._render_static_bars()
         self._window_ready = True
+        self._should_close = False
         self._pump_events()
-        self._last_top_bar_update_sec: int = -1
-        self._video_panel_bg = None
-        self._video_panel_bg_size = None
-        self._last_snapshot_write: float = 0.0
-
-    def _apply_dark_css(self, widget: Gtk.Widget) -> None:
-        pass
 
     def close(self) -> None:
         if self._video_widget is not None:
@@ -211,7 +219,7 @@ class CompetitionDisplay:
         native_video_hold: bool = False,
     ) -> int:
         self.open()
-        t0 = time.perf_counter()
+        now = time.perf_counter()
         if self._video_widget is not None:
             if native_video_hold:
                 self._update_video_panel(rgb, result)
@@ -221,7 +229,8 @@ class CompetitionDisplay:
         else:
             self._update_video_panel(rgb, result)
             self._set_video_fixed_visible(True)
-        current_sec = int(t0)
+
+        current_sec = int(now)
         if current_sec != self._last_top_bar_update_sec:
             self._last_top_bar_update_sec = current_sec
             self._update_phase6_top_bar(
@@ -236,10 +245,11 @@ class CompetitionDisplay:
             frame_index,
             source_frame_index,
             captured_frames,
+            assistant_status=assistant_status,
         )
         self._update_phase6_bottom_bar(assistant_status)
-        if self._last_snapshot_write == 0.0 or t0 - self._last_snapshot_write > 5.0:
-            self._last_snapshot_write = t0
+        if self._last_snapshot_write == 0.0 or now - self._last_snapshot_write > 5.0:
+            self._last_snapshot_write = now
             self._write_snapshot()
         self._pump_events()
         return 27 if self._should_close else -1
@@ -264,46 +274,29 @@ class CompetitionDisplay:
         draw = ImageDraw.Draw(image, "RGBA")
         title_font = self._load_font(max(28, w // 60))
         section_font = self._load_font(max(18, w // 110))
-        draw.rounded_rectangle(
-            (0, 0, w - 1, h - 1),
-            radius=28,
-            fill=(8, 26, 38, 245),
-            outline=(103, 200, 245, 100),
-            width=2,
-        )
+        badge_font = self._load_font(max(14, w // 125))
+        draw.rounded_rectangle((0, 0, w - 1, h - 1), radius=28, fill=(8, 26, 38, 245), outline=(103, 200, 245, 100), width=2)
         self._pill(draw, (20, 24, 112, 62), "LIVE", fill=(220, 62, 55, 240), font=section_font)
-        draw.text(
-            (136, 18),
-            "Board-side Corrosion Expert Phase 6",
-            font=title_font,
-            fill=(244, 251, 255, 255),
-        )
+        draw.text((136, 18), "Muse Pi Pro 板端多模态智能巡检竞赛展示", font=title_font, fill=(244, 251, 255, 255))
         draw.text(
             (136, 62),
-            f"{camera_backend}  |  {recognizer_backend}  |  Offline Multimodal Demo",
+            f"{camera_backend}  |  {recognizer_backend}  |  Phase6 Native Preview  |  Offline Multimodal Demo",
             font=section_font,
             fill=(150, 186, 207, 255),
         )
-        stamp = f"Muse Pi Pro  |  {time.strftime('%Y-%m-%d %H:%M:%S')}"
-        draw.text(
-            (w - self._text_width(draw, stamp, section_font) - 24, 28),
-            stamp,
-            font=section_font,
-            fill=(141, 240, 174, 255),
+        badge_specs = (
+            ("原生预览", (13, 42, 58, 255), (122, 219, 255, 70)),
+            ("双级检测", (16, 48, 52, 255), (141, 240, 174, 74)),
+            ("语音问答", (34, 39, 57, 255), (196, 173, 255, 74)),
+            ("知识增强", (45, 34, 29, 255), (255, 206, 104, 80)),
         )
-        self._top_panel_pil = image.copy()
-        self._set_image(self._top_image, image, slot="top")
-
-    def _update_top_bar(self, camera_backend: str, recognizer_backend: str) -> None:
-        w, h = self._layout["top_size"]
-        image = Image.new("RGB", (w, h), (8, 26, 38))
-        draw = ImageDraw.Draw(image, "RGBA")
-        title_font = self._load_font(max(28, w // 60))
-        section_font = self._load_font(max(18, w // 110))
-        draw.rounded_rectangle((0, 0, w - 1, h - 1), radius=28, fill=(8, 26, 38, 245), outline=(103, 200, 245, 100), width=2)
-        self._pill(draw, (20, 24, 112, 62), "LIVE", fill=(220, 62, 55, 240), font=section_font)
-        draw.text((136, 18), "板端防腐智能巡检 Phase 5", font=title_font, fill=(244, 251, 255, 255))
-        draw.text((136, 62), f"{camera_backend}  |  {recognizer_backend}", font=section_font, fill=(150, 186, 207, 255))
+        badge_x = 740
+        badge_y = 18
+        for text, fill, outline in badge_specs:
+            badge_w = self._text_width(draw, text, badge_font) + 30
+            draw.rounded_rectangle((badge_x, badge_y, badge_x + badge_w, badge_y + 28), radius=14, fill=fill, outline=outline, width=1)
+            draw.text((badge_x + 15, badge_y + 5), text, font=badge_font, fill=(236, 246, 251, 255))
+            badge_x += badge_w + 10
         stamp = f"Muse Pi Pro  |  {time.strftime('%Y-%m-%d %H:%M:%S')}"
         draw.text((w - self._text_width(draw, stamp, section_font) - 24, 28), stamp, font=section_font, fill=(141, 240, 174, 255))
         self._top_panel_pil = image.copy()
@@ -311,25 +304,22 @@ class CompetitionDisplay:
 
     def _update_video_panel(self, rgb: np.ndarray, result: VisionAnalysisResult | None) -> None:
         w, h = self._layout["video_size"]
-        bg_size = (w, h)
-        if self._video_panel_bg is None or self._video_panel_bg_size != bg_size:
+        if self._video_panel_bg is None or self._video_panel_bg_size != (w, h):
             self._video_panel_bg = Image.new("RGB", (w, h), (7, 18, 28))
             bg_draw = ImageDraw.Draw(self._video_panel_bg, "RGBA")
             bg_draw.rounded_rectangle((0, 0, w - 1, h - 1), radius=28, fill=(7, 18, 28, 255), outline=(103, 200, 245, 82), width=2)
             inset = 18
-            footer_h = 146
-            footer_rect_cache = (inset, h - 128, w - inset, h - inset)
-            bg_draw.rounded_rectangle(footer_rect_cache, radius=22, fill=(8, 24, 36, 242), outline=(103, 200, 245, 78), width=1)
-            self._video_panel_bg_size = bg_size
+            footer_rect = (inset, h - 128, w - inset, h - inset)
+            bg_draw.rounded_rectangle(footer_rect, radius=22, fill=(8, 24, 36, 242), outline=(103, 200, 245, 78), width=1)
+            self._video_panel_bg_size = (w, h)
+
         panel = self._video_panel_bg.copy()
         draw = ImageDraw.Draw(panel, "RGBA")
-
         inset = 18
         footer_h = 146
         frame_rect = (inset, inset, w - inset, h - footer_h)
         frame_img = self._fit_image_to_rect(rgb, frame_rect[2] - frame_rect[0], frame_rect[3] - frame_rect[1])
         panel.paste(frame_img, (frame_rect[0], frame_rect[1]))
-        draw = ImageDraw.Draw(panel, "RGBA")
         draw.rounded_rectangle(frame_rect, radius=20, outline=(255, 255, 255, 24), width=1)
         self._draw_project_boxes(draw, frame_rect, result.candidates if result else [], self._load_font(max(18, w // 90)))
 
@@ -339,9 +329,10 @@ class CompetitionDisplay:
         body_font = self._load_font(max(18, w // 96))
         top_candidate = result.candidates[0] if (result and result.candidates) else None
         zh_label, en_label = self._display_label(top_candidate.label if top_candidate else "")
-        summary = (top_candidate.summary if top_candidate else "正在稳定采集与分析当前画面").strip()
+        summary = (top_candidate.summary if top_candidate else "正在稳定采集与分析当前巡检画面。").strip()
         score = top_candidate.score if top_candidate else 0.0
-        draw.text((footer_rect[0] + 20, footer_rect[1] + 16), "主识别结果", font=section_font, fill=(92, 225, 230, 255))
+        seg_score, cls_score = self._candidate_stage_scores(top_candidate)
+        draw.text((footer_rect[0] + 20, footer_rect[1] + 16), "当前检测结论", font=section_font, fill=(92, 225, 230, 255))
         draw.text((footer_rect[0] + 20, footer_rect[1] + 44), zh_label or "实时分析中", font=hero_font, fill=(244, 251, 255, 255))
         if en_label:
             draw.text((footer_rect[0] + 22, footer_rect[1] + 86), en_label, font=section_font, fill=(156, 186, 200, 255))
@@ -349,7 +340,18 @@ class CompetitionDisplay:
         draw.rounded_rectangle(score_box, radius=18, fill=(24, 42, 56, 255), outline=(255, 206, 104, 120), width=2)
         draw.text((score_box[0] + 16, score_box[1] + 10), "CONF", font=section_font, fill=(255, 206, 104, 255))
         draw.text((score_box[0] + 16, score_box[1] + 30), f"{score:.2f}", font=body_font, fill=(255, 246, 220, 255))
-        self._wrapped_text(draw, footer_rect[0] + 300, footer_rect[1] + 22, footer_rect[2] - footer_rect[0] - 470, summary, body_font, (220, 232, 239, 255), 6, max_lines=3)
+        chip_specs = [
+            (f"一级检出 {self._format_optional_score(seg_score)}", (13, 44, 58, 255), (122, 219, 255, 90)),
+            (f"二级判定 {self._format_optional_score(cls_score)}", (18, 46, 37, 255), (141, 240, 174, 90)),
+        ]
+        chip_x = footer_rect[0] + 300
+        chip_y = footer_rect[1] + 20
+        for text, fill, outline in chip_specs:
+            chip_w = self._text_width(draw, text, section_font) + 28
+            draw.rounded_rectangle((chip_x, chip_y, chip_x + chip_w, chip_y + 32), radius=16, fill=fill, outline=outline, width=1)
+            draw.text((chip_x + 14, chip_y + 7), text, font=section_font, fill=(236, 246, 251, 255))
+            chip_x += chip_w + 10
+        self._wrapped_text(draw, footer_rect[0] + 300, footer_rect[1] + 58, footer_rect[2] - footer_rect[0] - 470, summary, body_font, (220, 232, 239, 255), 6, max_lines=3)
         self._video_panel_pil = panel.copy()
         self._set_image(self._video_image, panel, slot="video")
 
@@ -362,17 +364,26 @@ class CompetitionDisplay:
         frame_index: int,
         source_frame_index: int,
         captured_frames: int,
+        assistant_status: dict | None = None,
     ) -> None:
-        sig_candidates = tuple(
-            (c.label, round(c.score, 2)) for c in (result.candidates[:3] if result else [])
-        )
-        sig_timing = (
-            int(source_frame_index / 3),
-            round(capture_seconds, 1),
-            round(analysis_seconds, 2),
-            round(loop_seconds, 2),
-        )
-        signature = (sig_candidates, sig_timing)
+        assistant_status = assistant_status or {}
+        latest_user = self._clip_text(self._safe_status_text(assistant_status.get("latest_user_text"), "等待语音问题"), 34)
+        latest_reply = self._clip_text(self._safe_status_text(assistant_status.get("latest_reply_text"), "最近一次回答将在这里展示"), 52)
+        latest_visual_summary = self._clip_text(self._safe_status_text(assistant_status.get("latest_visual_summary"), "等待视觉链路稳定输出"), 54)
+        rag_text = self._clip_text(self._compact_rag_hits(assistant_status.get("latest_rag_hits") or []), 58)
+        rag_docs = int(assistant_status.get("rag_document_count", 0) or 0)
+        rag_chunks = int(assistant_status.get("rag_chunk_count", 0) or 0)
+        voice_metrics = dict(assistant_status.get("latest_voice_metrics") or {})
+        ttft_value = "--"
+        try:
+            if voice_metrics.get("first_chunk_ms") not in {None, ""}:
+                ttft_value = f"{int(round(float(voice_metrics.get('first_chunk_ms', 0.0))))}ms"
+        except Exception:
+            ttft_value = "--"
+
+        sig_candidates = tuple((c.label, round(c.score, 2)) for c in (result.candidates[:2] if result else []))
+        sig_timing = (int(source_frame_index / 3), round(capture_seconds, 3), round(analysis_seconds, 3), round(loop_seconds, 3))
+        signature = (sig_candidates, sig_timing, latest_user, latest_reply, latest_visual_summary, rag_text, rag_docs, rag_chunks, ttft_value)
         if signature == self._last_result_signature:
             return
         self._last_result_signature = signature
@@ -381,81 +392,117 @@ class CompetitionDisplay:
         panel = Image.new("RGB", (w, h), (8, 22, 32))
         draw = ImageDraw.Draw(panel, "RGBA")
         draw.rounded_rectangle((0, 0, w - 1, h - 1), radius=28, fill=(8, 22, 32, 255), outline=(103, 200, 245, 90), width=2)
-        title_font = self._load_font(max(26, w // 18))
-        section_font = self._load_font(max(18, w // 26))
-        body_font = self._load_font(max(18, w // 28))
-        small_font = self._load_font(max(14, w // 34))
-        metric_font = self._load_font(max(24, w // 20))
-        draw.text((24, 20), "赛事状态面板", font=title_font, fill=(244, 251, 255, 255))
-        draw.text((26, 64), "Competition Telemetry", font=section_font, fill=(152, 186, 204, 255))
-        metric_y = 108
-        metric_w = w - 48
-        self._metric_card(draw, 24, metric_y, metric_w, "采集耗时", f"{capture_seconds:.3f}s", section_font, metric_font)
-        self._metric_card(draw, 24, metric_y + 94, metric_w, "推理耗时", f"{analysis_seconds:.3f}s", section_font, metric_font)
-        self._metric_card(draw, 24, metric_y + 188, metric_w, "单轮总耗时", f"{loop_seconds:.3f}s", section_font, metric_font)
-        draw.text((24, metric_y + 292), "项目语义结果", font=section_font, fill=(92, 225, 230, 255))
-        chip_y = metric_y + 324
-        for candidate in (result.candidates[:3] if result else []):
-            zh_label, _ = self._display_label(candidate.label)
-            self._result_chip(draw, 24, chip_y, metric_w, zh_label or candidate.label, candidate.score, body_font, small_font)
-            chip_y += 68
-        if result is None or not result.candidates:
-            self._result_chip(draw, 24, chip_y, metric_w, "当前无高置信结果", 0.0, body_font, small_font, muted=True)
-            chip_y += 68
-        draw.text((24, chip_y + 6), "运行信息", font=section_font, fill=(92, 225, 230, 255))
-        info_y = chip_y + 40
-        facts = [
-            ("显示帧", str(frame_index)),
-            ("分析源帧", str(source_frame_index)),
-            ("累计采集", str(captured_frames)),
-            ("候选结果", str(len(result.candidates) if result else 0)),
-        ]
-        for key, value in facts:
-            draw.text((28, info_y), key, font=small_font, fill=(154, 186, 204, 255))
-            draw.text((w - self._text_width(draw, value, body_font) - 28, info_y - 4), value, font=body_font, fill=(244, 251, 255, 255))
-            info_y += 38
+        title_font = self._load_font(max(22, w // 20))
+        hero_font = self._load_font(max(24, w // 19))
+        section_font = self._load_font(max(16, w // 30))
+        body_font = self._load_font(max(15, w // 33))
+        small_font = self._load_font(max(12, w // 38))
+        metric_font = self._load_font(max(18, w // 24))
+        draw.text((24, 18), "竞赛评审看板", font=title_font, fill=(244, 251, 255, 255))
+        draw.text((24, 52), "Judging-Oriented Telemetry", font=section_font, fill=(152, 186, 204, 255))
+
+        top_candidate = result.candidates[0] if (result and result.candidates) else None
+        zh_label, en_label = self._display_label(top_candidate.label if top_candidate else "")
+        seg_score, cls_score = self._candidate_stage_scores(top_candidate)
+        summary_card = (24, 84, w - 24, 192)
+        draw.rounded_rectangle(summary_card, radius=24, fill=(12, 31, 44, 255), outline=(255, 255, 255, 18), width=1)
+        draw.text((summary_card[0] + 18, summary_card[1] + 14), "当前巡检结论", font=section_font, fill=(92, 225, 230, 255))
+        draw.text((summary_card[0] + 18, summary_card[1] + 40), zh_label or "等待稳定视觉结果", font=hero_font, fill=(244, 251, 255, 255))
+        if en_label:
+            draw.text((summary_card[0] + 18, summary_card[1] + 74), en_label, font=small_font, fill=(156, 186, 200, 255))
+        if top_candidate is not None:
+            summary_line = f"一级检出 {self._format_optional_score(seg_score)}  |  二级判定 {self._format_optional_score(cls_score)}  |  置信度 {top_candidate.score:.2f}"
+        else:
+            summary_line = "双级检测链路持续运行中，等待稳定候选。"
+        self._wrapped_text(
+            draw,
+            summary_card[0] + 18,
+            summary_card[1] + 92,
+            summary_card[2] - summary_card[0] - 36,
+            summary_line,
+            body_font,
+            (236, 246, 251, 255),
+            4,
+            max_lines=2,
+        )
+        self._wrapped_text(
+            draw,
+            summary_card[0] + 18,
+            summary_card[1] + 124,
+            summary_card[2] - summary_card[0] - 36,
+            latest_visual_summary,
+            small_font,
+            (176, 203, 217, 255),
+            4,
+            max_lines=1,
+        )
+
+        metric_gap = 12
+        metric_y = 208
+        metric_w = int((w - 48 - metric_gap) / 2)
+        self._mini_metric_card(draw, 24, metric_y, metric_w, "采集耗时", f"{capture_seconds:.3f}s", section_font, metric_font)
+        self._mini_metric_card(draw, 24 + metric_w + metric_gap, metric_y, metric_w, "推理耗时", f"{analysis_seconds:.3f}s", section_font, metric_font)
+        self._mini_metric_card(draw, 24, metric_y + 78, metric_w, "单轮总耗时", f"{loop_seconds:.3f}s", section_font, metric_font)
+        self._mini_metric_card(draw, 24 + metric_w + metric_gap, metric_y + 78, metric_w, "语音首响 TTFT", ttft_value, section_font, metric_font)
+
+        draw.text((24, 368), "双级检测候选", font=section_font, fill=(92, 225, 230, 255))
+        chip_y = 396
+        chip_w = w - 48
+        shown_candidates = list(result.candidates[:2] if result else [])
+        for candidate in shown_candidates:
+            candidate_zh, _ = self._display_label(candidate.label)
+            stage_one, stage_two = self._candidate_stage_scores(candidate)
+            detail = f"一级 {self._format_optional_score(stage_one)}  |  二级 {self._format_optional_score(stage_two)}"
+            self._result_chip(draw, 24, chip_y, chip_w, candidate_zh or candidate.label, candidate.score, body_font, small_font, detail=detail)
+            chip_y += 62
+        if not shown_candidates:
+            self._result_chip(draw, 24, chip_y, chip_w, "当前暂无稳定视觉结果", 0.0, body_font, small_font, detail="等待一级检出与二级判定链路继续刷新", muted=True)
+            chip_y += 62
+
+        qa_panel = (24, chip_y + 6, w - 24, chip_y + 90)
+        draw.rounded_rectangle(qa_panel, radius=22, fill=(11, 29, 41, 255), outline=(255, 255, 255, 18), width=1)
+        draw.text((qa_panel[0] + 16, qa_panel[1] + 12), "最近一次问答", font=section_font, fill=(92, 225, 230, 255))
+        self._wrapped_text(draw, qa_panel[0] + 16, qa_panel[1] + 36, qa_panel[2] - qa_panel[0] - 32, f"问: {latest_user}", body_font, (236, 246, 251, 255), 4, max_lines=1)
+        self._wrapped_text(draw, qa_panel[0] + 16, qa_panel[1] + 58, qa_panel[2] - qa_panel[0] - 32, f"答: {latest_reply}", small_font, (176, 203, 217, 255), 4, max_lines=1)
+
+        bottom_panel = (24, qa_panel[3] + 10, w - 24, h - 20)
+        draw.rounded_rectangle(bottom_panel, radius=22, fill=(11, 29, 41, 255), outline=(255, 255, 255, 18), width=1)
+        draw.text((bottom_panel[0] + 16, bottom_panel[1] + 12), "知识命中与考核指标", font=section_font, fill=(92, 225, 230, 255))
+        draw.text((bottom_panel[0] + 16, bottom_panel[1] + 38), f"知识库规模: {rag_docs} 份文档 / {rag_chunks} 个索引块", font=small_font, fill=(236, 246, 251, 255))
+        self._wrapped_text(draw, bottom_panel[0] + 16, bottom_panel[1] + 58, bottom_panel[2] - bottom_panel[0] - 32, f"最近命中: {rag_text}", small_font, (176, 203, 217, 255), 4, max_lines=1)
+        bullet_y = bottom_panel[1] + 90
+        for bullet in JUDGING_DIMENSIONS:
+            self._wrapped_text(
+                draw,
+                bottom_panel[0] + 18,
+                bullet_y,
+                bottom_panel[2] - bottom_panel[0] - 36,
+                f"• {bullet}",
+                small_font,
+                (176, 203, 217, 255),
+                4,
+                max_lines=1,
+            )
+            bullet_y += 18
+        draw.text((bottom_panel[0] + 16, bottom_panel[3] - 20), f"显示帧 {frame_index}  |  源帧 {source_frame_index}  |  累计 {captured_frames}", font=small_font, fill=(141, 240, 174, 255))
         self._right_panel_pil = panel.copy()
         self._set_image(self._right_image, panel, slot="right")
 
-    def _update_bottom_bar(self) -> None:
-        w, h = self._layout["bottom_size"]
-        panel = Image.new("RGB", (w, h), (8, 22, 32))
-        draw = ImageDraw.Draw(panel, "RGBA")
-        body_font = self._load_font(max(18, w // 96))
-        small_font = self._load_font(max(14, w // 120))
-        draw.rounded_rectangle((0, 0, w - 1, h - 1), radius=24, fill=(8, 22, 32, 255), outline=(103, 200, 245, 88), width=2)
-        draw.text((20, 18), "SpaceMIT Vision Pipeline", font=body_font, fill=(244, 251, 255, 255))
-        draw.text((290, 21), "USB Camera  |  Native Split-Screen OSD  |  ESC / Q 退出", font=small_font, fill=(160, 191, 207, 255))
-        self._bottom_panel_pil = panel.copy()
-        self._set_image(self._bottom_image, panel, slot="bottom")
-
     def _update_phase6_bottom_bar(self, assistant_status: dict | None = None) -> None:
         assistant_status = assistant_status or {}
-        mode_text = self._clip_text(
-            self._safe_status_text(assistant_status.get("mode"), "Inspection"),
-            26,
-        )
-        stage_text = self._clip_text(
-            self._safe_status_text(assistant_status.get("voice_stage"), "idle"),
-            18,
-        )
-        headline_text = self._clip_text(
-            self._safe_status_text(assistant_status.get("voice_headline"), "Voice and RAG ready"),
-            36,
-        )
-        user_text = self._clip_text(
+        mode_text = self._clip_text(self._safe_status_text(assistant_status.get("mode"), "Inspection"), 26)
+        stage_text = self._clip_text(self._safe_status_text(assistant_status.get("voice_stage"), "idle"), 18)
+        headline_text = self._clip_text(self._safe_status_text(assistant_status.get("voice_headline"), "Voice and RAG ready"), 36)
+        user_text = self._clip_text(self._safe_status_text(assistant_status.get("latest_user_text"), "Waiting for ASR or console question"), 52)
+        reply_text = self._clip_text(
             self._safe_status_text(
-                assistant_status.get("latest_user_text"),
-                "Waiting for ASR or console question",
+                assistant_status.get("latest_reply_text"),
+                assistant_status.get("latest_visual_summary"),
             ),
-            52,
+            56,
         )
-        citation_items = assistant_status.get("latest_citations") or []
-        citation_text = self._clip_text(
-            ", ".join(str(item) for item in citation_items[:2]) or "No citations yet",
-            48,
-        )
-        signature = (mode_text, stage_text, headline_text, user_text, citation_text)
+        rag_text = self._clip_text(self._compact_rag_hits(assistant_status.get("latest_rag_hits") or []), 44)
+        signature = (mode_text, stage_text, headline_text, user_text, reply_text, rag_text)
         if signature == self._last_bottom_signature:
             return
         self._last_bottom_signature = signature
@@ -463,73 +510,29 @@ class CompetitionDisplay:
         w, h = self._layout["bottom_size"]
         panel = Image.new("RGB", (w, h), (8, 22, 32))
         draw = ImageDraw.Draw(panel, "RGBA")
-        body_font = self._load_font(max(17, w // 100))
-        small_font = self._load_font(max(13, w // 126))
-        draw.rounded_rectangle(
-            (0, 0, w - 1, h - 1),
-            radius=24,
-            fill=(8, 22, 32, 255),
-            outline=(103, 200, 245, 88),
-            width=2,
-        )
+        body_font = self._load_font(max(16, w // 105))
+        small_font = self._load_font(max(12, w // 132))
+        draw.rounded_rectangle((0, 0, w - 1, h - 1), radius=24, fill=(8, 22, 32, 255), outline=(103, 200, 245, 88), width=2)
         block_gap = 14
         block_y = 12
         block_h = h - 24
-        left_w = max(280, int(w * 0.26))
-        mid_w = max(300, int(w * 0.28))
+        left_w = max(360, int(w * 0.35))
+        mid_w = max(250, int(w * 0.20))
         right_w = w - 40 - block_gap * 2 - left_w - mid_w
         left_x = 20
         mid_x = left_x + left_w + block_gap
         right_x = mid_x + mid_w + block_gap
 
-        self._bottom_field(
-            draw,
-            left_x,
-            block_y,
-            left_w,
-            block_h,
-            "PIPELINE",
-            "OFFLINE / USB camera / Native OSD / ESC or Q to exit",
-            small_font,
-            body_font,
-        )
-        self._bottom_field(
-            draw,
-            mid_x,
-            block_y,
-            mid_w,
-            block_h,
-            f"MODE {mode_text} / VOICE {stage_text}",
-            headline_text,
-            small_font,
-            body_font,
-        )
-        self._bottom_field(
-            draw,
-            right_x,
-            block_y,
-            right_w,
-            block_h,
-            f"LATEST INPUT / {citation_text}",
-            user_text,
-            small_font,
-            body_font,
-        )
+        self._bottom_field(draw, left_x, block_y, left_w, block_h, "语音快捷指令", "你好，总结一下 [V] | 你好，保存截图 [S] | 你好，退出程序 [Q]", small_font, body_font)
+        self._bottom_field(draw, mid_x, block_y, mid_w, block_h, f"MODE {mode_text} / VOICE {stage_text}", headline_text, small_font, body_font)
+        self._bottom_field(draw, right_x, block_y, right_w, block_h, f"最近问答 / 命中", f"问: {user_text} | 答: {reply_text}", small_font, body_font)
         self._bottom_panel_pil = panel.copy()
         self._set_image(self._bottom_image, panel, slot="bottom")
 
     def _write_snapshot(self) -> None:
         if self.snapshot_path is None:
             return
-        if not all(
-            panel is not None
-            for panel in (
-                self._top_panel_pil,
-                self._video_panel_pil,
-                self._right_panel_pil,
-                self._bottom_panel_pil,
-            )
-        ):
+        if not all(panel is not None for panel in (self._top_panel_pil, self._video_panel_pil, self._right_panel_pil, self._bottom_panel_pil)):
             return
         gap = self._layout["gap"]
         screen_w, screen_h = self._screen_size
@@ -554,15 +557,7 @@ class CompetitionDisplay:
         rgb = np.asarray(image.convert("RGB"))
         data = np.ascontiguousarray(rgb).tobytes()
         glib_bytes = GLib.Bytes.new(data)
-        pixbuf = GdkPixbuf.Pixbuf.new_from_bytes(
-            glib_bytes,
-            GdkPixbuf.Colorspace.RGB,
-            False,
-            8,
-            rgb.shape[1],
-            rgb.shape[0],
-            rgb.shape[1] * 3,
-        )
+        pixbuf = GdkPixbuf.Pixbuf.new_from_bytes(glib_bytes, GdkPixbuf.Colorspace.RGB, False, 8, rgb.shape[1], rgb.shape[0], rgb.shape[1] * 3)
         widget.set_from_pixbuf(pixbuf)
         if slot == "video":
             self._latest_video_bytes = data
@@ -621,19 +616,63 @@ class CompetitionDisplay:
             draw.rounded_rectangle((x1, tag_y, x1 + tw + 24, tag_y + 32), radius=10, fill=(5, 22, 32, 240), outline=(92, 225, 230, 180), width=2)
             draw.text((x1 + 12, tag_y + 5), label, font=body_font, fill=(244, 251, 255, 255))
 
-    def _metric_card(self, draw: ImageDraw.ImageDraw, x: int, y: int, width: int, label: str, value: str, small_font, big_font) -> None:
-        draw.rounded_rectangle((x, y, x + width, y + 74), radius=22, fill=(12, 30, 42, 255), outline=(255, 255, 255, 18), width=1)
-        draw.text((x + 18, y + 12), label, font=small_font, fill=(155, 188, 204, 255))
-        draw.text((x + width - self._text_width(draw, value, big_font) - 18, y + 24), value, font=big_font, fill=(244, 251, 255, 255))
+    @staticmethod
+    def _candidate_stage_scores(candidate: DefectCandidate | None) -> tuple[float | None, float | None]:
+        if candidate is None:
+            return None, None
+        evidence = dict(candidate.evidence or {})
+        seg_score = evidence.get("segmentation_score")
+        cls_score = evidence.get("classification_score")
+        try:
+            seg_value = float(seg_score) if seg_score not in {None, ""} else None
+        except Exception:
+            seg_value = None
+        try:
+            cls_value = float(cls_score) if cls_score not in {None, ""} else None
+        except Exception:
+            cls_value = None
+        return seg_value, cls_value
 
-    def _result_chip(self, draw: ImageDraw.ImageDraw, x: int, y: int, width: int, label: str, score: float, body_font, small_font, muted: bool = False) -> None:
+    @staticmethod
+    def _format_optional_score(score: float | None) -> str:
+        return "--" if score is None else f"{score:.2f}"
+
+    @staticmethod
+    def _compact_rag_hits(rag_hits: list[dict]) -> str:
+        if not rag_hits:
+            return "暂无知识库命中"
+        titles = []
+        for hit in rag_hits[:2]:
+            title = " ".join(str(hit.get("title") or "").replace("\n", " ").split()).strip()
+            if title:
+                titles.append(title)
+        return " / ".join(titles) if titles else "已有知识库命中"
+
+    def _mini_metric_card(self, draw: ImageDraw.ImageDraw, x: int, y: int, width: int, label: str, value: str, small_font, big_font) -> None:
+        draw.rounded_rectangle((x, y, x + width, y + 66), radius=20, fill=(12, 30, 42, 255), outline=(255, 255, 255, 18), width=1)
+        draw.text((x + 14, y + 10), label, font=small_font, fill=(155, 188, 204, 255))
+        draw.text((x + 14, y + 34), value, font=big_font, fill=(244, 251, 255, 255))
+
+    def _result_chip(
+        self,
+        draw: ImageDraw.ImageDraw,
+        x: int,
+        y: int,
+        width: int,
+        label: str,
+        score: float,
+        body_font,
+        small_font,
+        detail: str = "project semantic output",
+        muted: bool = False,
+    ) -> None:
         fill = (12, 34, 46, 255) if not muted else (20, 28, 34, 255)
         outline = (120, 213, 255, 84) if not muted else (120, 120, 120, 50)
         draw.rounded_rectangle((x, y, x + width, y + 54), radius=18, fill=fill, outline=outline, width=1)
         draw.text((x + 16, y + 12), label, font=body_font, fill=(236, 246, 251, 255))
         score_text = f"{score:.2f}"
         draw.text((x + width - self._text_width(draw, score_text, body_font) - 18, y + 12), score_text, font=body_font, fill=(255, 206, 104, 255))
-        draw.text((x + 16, y + 34), "project semantic output", font=small_font, fill=(140, 173, 189, 255))
+        draw.text((x + 16, y + 34), detail, font=small_font, fill=(140, 173, 189, 255))
 
     def _wrapped_text(self, draw: ImageDraw.ImageDraw, x: int, y: int, max_width: int, text: str, font, fill, line_gap: int, max_lines: int = 99) -> int:
         line = ""
@@ -681,37 +720,10 @@ class CompetitionDisplay:
         th = self._line_height(font)
         draw.text((box[0] + ((box[2] - box[0]) - tw) / 2, box[1] + ((box[3] - box[1]) - th) / 2 - 2), text, font=font, fill=(255, 255, 255, 255))
 
-    def _bottom_field(
-        self,
-        draw: ImageDraw.ImageDraw,
-        x: int,
-        y: int,
-        width: int,
-        height: int,
-        label: str,
-        value: str,
-        label_font,
-        value_font,
-    ) -> None:
-        draw.rounded_rectangle(
-            (x, y, x + width, y + height),
-            radius=18,
-            fill=(11, 31, 43, 255),
-            outline=(255, 255, 255, 18),
-            width=1,
-        )
+    def _bottom_field(self, draw: ImageDraw.ImageDraw, x: int, y: int, width: int, height: int, label: str, value: str, label_font, value_font) -> None:
+        draw.rounded_rectangle((x, y, x + width, y + height), radius=18, fill=(11, 31, 43, 255), outline=(255, 255, 255, 18), width=1)
         draw.text((x + 14, y + 8), label, font=label_font, fill=(141, 240, 174, 255))
-        self._wrapped_text(
-            draw,
-            x + 14,
-            y + 26,
-            width - 28,
-            value,
-            value_font,
-            (236, 246, 251, 255),
-            4,
-            max_lines=2,
-        )
+        self._wrapped_text(draw, x + 14, y + 26, width - 28, value, value_font, (236, 246, 251, 255), 4, max_lines=1)
 
     def _load_font(self, size: int):
         if self._font_path:

@@ -14,6 +14,7 @@ MODE_TO_CONFIG = {
     "default": Path("configs/voice.yaml"),
     "fast": Path("configs/voice_fast.yaml"),
     "multimodal_demo": Path("configs/multimodal_demo.yaml"),
+    "voice_guided_demo": Path("configs/voice_guided_demo.yaml"),
     "vision": Path("configs/vision.yaml"),
     "vision_usb": Path("configs/vision_usb.yaml"),
     "vision_usb_demo": Path("configs/vision_usb_demo.yaml"),
@@ -59,6 +60,16 @@ def build_parser():
         help="Optional frame limit for scripted tests. Use 0 to keep running.",
     )
     multimodal_demo.add_argument(
+        "--headless-vision",
+        action="store_true",
+        help="Disable the fullscreen competition display and keep only the terminal dashboard.",
+    )
+
+    voice_guided_demo = subparsers.add_parser(
+        "voice-guided-demo",
+        help="Run the voice-guided camera selection and inspection demo",
+    )
+    voice_guided_demo.add_argument(
         "--headless-vision",
         action="store_true",
         help="Disable the fullscreen competition display and keep only the terminal dashboard.",
@@ -314,20 +325,29 @@ def _run_vision_commands(config, args) -> bool:
 
 
 def _run_multimodal_commands(config, args) -> bool:
-    if args.command != "multimodal-demo":
+    if args.command not in {"multimodal-demo", "voice-guided-demo"}:
         return False
 
-    from app.core.multimodal_controller import MultimodalDemoController
+    if args.command == "voice-guided-demo":
+        from app.core.voice_guided_demo_controller import VoiceGuidedDemoController
 
-    controller = MultimodalDemoController(
-        config,
-        camera_backend=args.backend or None,
-        recognizer_backend=args.recognizer or None,
-        interval_seconds=args.interval_seconds,
-        max_frames=args.max_frames,
-        display_competition=not args.headless_vision,
-        performance_mode=True,
-    )
+        controller = VoiceGuidedDemoController(
+            config,
+            display_competition=not args.headless_vision,
+            performance_mode=True,
+        )
+    else:
+        from app.core.multimodal_controller import MultimodalDemoController
+
+        controller = MultimodalDemoController(
+            config,
+            camera_backend=args.backend or None,
+            recognizer_backend=args.recognizer or None,
+            interval_seconds=args.interval_seconds,
+            max_frames=args.max_frames,
+            display_competition=not args.headless_vision,
+            performance_mode=True,
+        )
     _print_json(controller.run())
     return True
 

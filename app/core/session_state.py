@@ -41,6 +41,7 @@ class MultimodalSessionState:
             "latest_user_text": "",
             "latest_reply_text": "",
             "latest_citations": [],
+            "latest_rag_hits": [],
             "latest_voice_metrics": {},
             "latest_visual_candidates": [],
             "latest_visual_metrics": {},
@@ -108,9 +109,17 @@ class MultimodalSessionState:
                 "mode": self._state.get("mode", ""),
                 "voice_stage": self._state.get("voice_stage", ""),
                 "voice_headline": self._state.get("voice_headline", ""),
+                "voice_detail": self._state.get("voice_detail", ""),
                 "latest_user_text": self._state.get("latest_user_text", ""),
                 "latest_reply_text": self._state.get("latest_reply_text", ""),
                 "latest_citations": list(self._state.get("latest_citations", [])),
+                "latest_rag_hits": list(self._state.get("latest_rag_hits", [])),
+                "latest_voice_metrics": dict(self._state.get("latest_voice_metrics", {})),
+                "latest_visual_summary": self._state.get("latest_visual_summary", ""),
+                "latest_visual_metrics": dict(self._state.get("latest_visual_metrics", {})),
+                "latest_visual_candidates": list(self._state.get("latest_visual_candidates", [])),
+                "rag_document_count": int(self._state.get("rag_document_count", 0) or 0),
+                "rag_chunk_count": int(self._state.get("rag_chunk_count", 0) or 0),
             }
 
     def _apply_health(self, payload: dict[str, Any]) -> None:
@@ -126,6 +135,14 @@ class MultimodalSessionState:
             self._state["voice_headline"] = str(payload.get("headline", ""))
         if "detail" in payload:
             self._state["voice_detail"] = str(payload.get("detail", ""))
+        if "latest_user_text" in payload:
+            self._state["latest_user_text"] = str(payload.get("latest_user_text", "")).strip()
+        if "latest_reply_text" in payload:
+            self._state["latest_reply_text"] = str(payload.get("latest_reply_text", "")).strip()
+        if "latest_citations" in payload:
+            self._state["latest_citations"] = list(payload.get("latest_citations", []))
+        if "latest_rag_hits" in payload:
+            self._state["latest_rag_hits"] = list(payload.get("latest_rag_hits", []))
         latest_metrics = payload.get("latest_metrics")
         if latest_metrics is not None:
             self._state["latest_voice_metrics"] = dict(latest_metrics)
@@ -134,6 +151,7 @@ class MultimodalSessionState:
         self._state["latest_user_text"] = str(payload.get("user_text", "")).strip()
         self._state["latest_reply_text"] = str(payload.get("reply_text", "")).strip()
         self._state["latest_citations"] = list(payload.get("citations", []))
+        self._state["latest_rag_hits"] = list(payload.get("rag_hits", []))
         self._state["latest_voice_metrics"] = dict(payload.get("metrics", {}))
         self._state["voice_stage"] = "ready"
         self._state["voice_headline"] = "最近一轮问答已完成"

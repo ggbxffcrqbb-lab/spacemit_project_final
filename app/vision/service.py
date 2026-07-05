@@ -33,6 +33,7 @@ class VisionPipelineService:
         self.config = config
         self.logger = logging.getLogger("app.vision.service")
         self.config.vision.output_dir.mkdir(parents=True, exist_ok=True)
+        self._recognizer_cache: dict[str, Any] = {}
 
     def doctor(self, backend_name: str | None = None, probe: bool = False) -> dict:
         backend = build_camera_backend(self.config.vision, backend_name)
@@ -91,7 +92,7 @@ class VisionPipelineService:
         image = Path(image_path).expanduser()
         if not image.exists():
             raise FileNotFoundError(f"图像文件不存在: {image}")
-        recognizer = build_defect_recognizer(self.config.vision, recognizer_backend)
+        recognizer = self._get_recognizer(recognizer_backend)
         result = recognizer.analyze(image, Path(annotated_output_path) if annotated_output_path else None)
         return result.to_dict()
 
@@ -103,7 +104,7 @@ class VisionPipelineService:
         annotated_output_path: str | None = None,
     ) -> dict:
         backend = build_camera_backend(self.config.vision, camera_backend)
-        recognizer = build_defect_recognizer(self.config.vision, recognizer_backend)
+        recognizer = self._get_recognizer(recognizer_backend)
         frame = backend.capture_once(Path(capture_output_path) if capture_output_path else None)
         result = recognizer.analyze(
             frame.image_path,
@@ -121,11 +122,14 @@ class VisionPipelineService:
         performance_mode: bool | None = None,
         display_competition: bool = False,
         analysis_callback: Callable[[dict[str, Any]], None] | None = None,
+        display_callback: Callable[[dict[str, Any]], None] | None = None,
         assistant_status_getter: Callable[[], dict[str, Any]] | None = None,
         external_stop_event: threading.Event | None = None,
+        competition_display: CompetitionDisplay | None = None,
+        allow_native_competition_video: bool | None = None,
     ) -> dict:
         backend = build_camera_backend(self.config.vision, camera_backend)
-        recognizer = build_defect_recognizer(self.config.vision, recognizer_backend)
+        recognizer = self._get_recognizer(recognizer_backend)
         warnings, errors = self._build_runtime_advice(for_stream=backend.supports_streaming())
         for warning in warnings:
             self.logger.warning("vision runtime warning: %s", warning)
@@ -173,7 +177,10 @@ class VisionPipelineService:
             if str(item).strip()
         }
         native_video_env = os.getenv("SPACEMIT_COMPETITION_NATIVE_VIDEO", "").strip().lower()
-        prefer_native_competition_video = native_video_env in {"1", "true", "yes", "on"}
+        if allow_native_competition_video is None:
+            prefer_native_competition_video = native_video_env in {"1", "true", "yes", "on"}
+        else:
+            prefer_native_competition_video = bool(allow_native_competition_video)
         default_display_fps = 30.0 if prefer_native_competition_video else 15.0
         try:
             competition_display_fps = max(
@@ -199,14 +206,13 @@ class VisionPipelineService:
         enable_native_preview = bool(display_status_page)
         if display_competition and prefer_native_competition_video:
             enable_native_preview = True
-        competition_display = (
-            CompetitionDisplay(
+        owns_competition_display = False
+        if display_competition and competition_display is None:
+            competition_display = CompetitionDisplay(
                 f"{self.config.project_name} Phase 6",
                 snapshot_path=self.config.vision.output_dir / "competition_display_snapshot.png",
             )
-            if display_competition
-            else None
-        )
+            owns_competition_display = True
         if generate_status_page:
             status = VisionStatusPageWriter(
                 output_dir=self.config.vision.output_dir,
@@ -288,6 +294,11 @@ class VisionPipelineService:
             nonlocal native_video_hold_active, native_video_hold_capture_seq
             nonlocal native_video_hold_until
             preview_only_resume_pending = False
+            bind_current_thread(
+                os.getenv("SPACEMIT_VISION_CPUSET", ""),
+                logger=self.logger,
+                label="vision capture worker",
+            )
             try:
                 while not stop_event.is_set():
                     capture_policy = "normal"
@@ -336,6 +347,7 @@ class VisionPipelineService:
                     packet = {
                         "source_frame_index": next_seq,
                         "frame": frame,
+                        "capture_started_at": started_at,
                         "capture_seconds": capture_seconds_value,
                     }
                     resume_completed = False
@@ -464,14 +476,18 @@ class VisionPipelineService:
                         str(logical_capture_path) if (write_latest_capture or write_slot_images) else ""
                     )
 
-                    started_at = time.perf_counter()
-                    last_analysis_started_at = started_at
+                    analysis_started_at = time.perf_counter()
+                    last_analysis_started_at = analysis_started_at
                     result = recognizer.analyze_rgb(
                         frame.rgb,
                         logical_capture_path,
                         annotated_output if not performance_mode else None,
                     )
-                    analysis_seconds_value = time.perf_counter() - started_at
+                    analysis_completed_at = time.perf_counter()
+                    analysis_seconds_value = analysis_completed_at - analysis_started_at
+                    loop_seconds_value = analysis_completed_at - float(
+                        packet.get("capture_started_at", analysis_started_at)
+                    )
                     last_analysis_wall_seconds = analysis_seconds_value
                     analyzed_count += 1
                     last_analyzed_source_index = source_frame_index
@@ -500,7 +516,7 @@ class VisionPipelineService:
                             "analysis_interval_seconds": analysis_interval_seconds,
                             "capture_seconds": round(capture_seconds_value, 4),
                             "analysis_seconds": round(analysis_seconds_value, 4),
-                            "loop_seconds": round(analysis_seconds_value, 4),
+                            "loop_seconds": round(loop_seconds_value, 4),
                             "analysis_policy": current_policy,
                             "capture_mode": "continuous_gst" if backend.supports_streaming() else "threaded_poll_once",
                             "threading_mode": "capture_thread_plus_inference_thread",
@@ -521,7 +537,7 @@ class VisionPipelineService:
                         "captured_frames": capture_seq,
                         "capture_seconds": capture_seconds_value,
                         "analysis_seconds": analysis_seconds_value,
-                        "loop_seconds": analysis_seconds_value,
+                        "loop_seconds": loop_seconds_value,
                         "latest_capture_path": latest_display_path,
                     }
                     if status is not None:
@@ -535,7 +551,7 @@ class VisionPipelineService:
                             frame_interval_seconds=analysis_interval_seconds,
                             capture_seconds=capture_seconds_value,
                             analysis_seconds=analysis_seconds_value,
-                            loop_seconds=analysis_seconds_value,
+                            loop_seconds=loop_seconds_value,
                             latest_capture_path=latest_display_path,
                             latest_annotated_path=str(result.annotated_image_path or ""),
                             latest_candidates=[candidate.to_dict() for candidate in result.candidates],
@@ -553,7 +569,7 @@ class VisionPipelineService:
                                     "captured_frames": capture_seq,
                                     "capture_seconds": capture_seconds_value,
                                     "analysis_seconds": analysis_seconds_value,
-                                    "loop_seconds": analysis_seconds_value,
+                                    "loop_seconds": loop_seconds_value,
                                     "analysis_policy": current_policy,
                                     "latest_capture_path": latest_display_path,
                                     "result_dict": latest_result["analysis"],
@@ -589,6 +605,11 @@ class VisionPipelineService:
                 ):
                     preview_widget = stream.get_preview_widget()
                     if preview_widget is not None:
+                        self.logger.info(
+                            "competition native video attached: backend=%s widget=%s",
+                            backend.backend_name,
+                            type(preview_widget).__name__,
+                        )
                         competition_display.attach_video_widget(preview_widget)
                         competition_native_video = True
                         competition_display.open()
@@ -632,22 +653,29 @@ class VisionPipelineService:
                                 )
                         cap_err = None
                     if infer_err is not None:
-                        if degraded_capture_error is not None:
-                            if degraded_analysis_error is None:
-                                degraded_analysis_error = infer_err
-                                self.logger.warning(
-                                    "vision analysis worker stopped after capture failure: %s",
-                                    infer_err,
+                        if degraded_analysis_error is None:
+                            degraded_analysis_error = infer_err
+                            latest_analysis = None
+                            self.logger.warning(
+                                "vision analysis degraded, keeping preview alive without fresh detections: %s",
+                                infer_err,
+                            )
+                            if status is not None:
+                                status.update(
+                                    stage="degraded",
+                                    headline="Vision analysis degraded",
+                                    detail=(
+                                        "Camera preview stays live, but fresh detection results are temporarily unavailable. "
+                                        f"Cause: {type(infer_err).__name__}: {infer_err}"
+                                    ),
                                 )
-                        else:
-                            raise infer_err
+                        infer_err = None
 
                     analysis_snapshot = latest_analysis
                     if packet is None:
                         time.sleep(0.01)
                         continue
                     frame = packet["frame"]
-                    capture_seconds_value = float(packet["capture_seconds"])
                     result_obj = analysis_snapshot["result"] if analysis_snapshot is not None else None
                     display_frame_index = int(analysis_snapshot["frame_index"]) if analysis_snapshot else 0
                     display_source_index = (
@@ -655,35 +683,62 @@ class VisionPipelineService:
                         if analysis_snapshot is not None
                         else int(packet["source_frame_index"])
                     )
+                    capture_seconds_value = (
+                        float(analysis_snapshot["capture_seconds"])
+                        if analysis_snapshot is not None
+                        else float(packet["capture_seconds"])
+                    )
                     analysis_seconds_value = float(analysis_snapshot["analysis_seconds"]) if analysis_snapshot else 0.0
                     loop_seconds_value = float(analysis_snapshot["loop_seconds"]) if analysis_snapshot else 0.0
 
+                    if competition_display is None and display_callback is None and analysis_snapshot is None:
+                        time.sleep(0.01)
+                        continue
+
+                    display_seq += 1
+                    loop_start = time.perf_counter()
+                    display_rgb = (
+                        frame.rgb if frame is not None
+                        else np.zeros((720, 1280, 3), dtype=np.uint8)
+                    )
+                    if competition_native_video and stream is not None and hasattr(stream, "set_overlay_boxes"):
+                        boxes: list[dict] = []
+                        if result_obj:
+                            for c in (result_obj.candidates or []):
+                                if c.box:
+                                    box = dict(c.box)
+                                    box["label"] = f"{c.label} {c.score:.2f}"
+                                    boxes.append(box)
+                        stream.set_overlay_boxes(boxes)
+                    assistant_status = (
+                        assistant_status_getter() if assistant_status_getter is not None else None
+                    )
+                    native_video_hold = False
+                    if competition_native_video:
+                        with native_video_hold_lock:
+                            native_video_hold = native_video_hold_active or (
+                                native_video_hold_until > 0.0
+                                and time.perf_counter() < native_video_hold_until
+                            )
+                    display_payload = {
+                        "frame_rgb": display_rgb,
+                        "result": result_obj,
+                        "capture_seconds": capture_seconds_value,
+                        "analysis_seconds": analysis_seconds_value,
+                        "loop_seconds": loop_seconds_value,
+                        "frame_index": display_seq,
+                        "source_frame_index": display_source_index,
+                        "captured_frames": capture_seq,
+                        "camera_backend": backend.backend_name,
+                        "assistant_status": assistant_status,
+                        "native_video_hold": native_video_hold,
+                    }
+                    if display_callback is not None:
+                        try:
+                            display_callback(display_payload)
+                        except Exception as callback_exc:
+                            self.logger.warning("vision display callback failed: %s", callback_exc)
                     if competition_display is not None:
-                        display_seq += 1
-                        loop_start = time.perf_counter()
-                        display_rgb = (
-                            frame.rgb if frame is not None
-                            else np.zeros((720, 1280, 3), dtype=np.uint8)
-                        )
-                        if competition_native_video and stream is not None and hasattr(stream, "set_overlay_boxes"):
-                            boxes: list[dict] = []
-                            if result_obj:
-                                for c in (result_obj.candidates or []):
-                                    if c.box:
-                                        box = dict(c.box)
-                                        box["label"] = f"{c.label} {c.score:.2f}"
-                                        boxes.append(box)
-                            stream.set_overlay_boxes(boxes)
-                        assistant_status = (
-                            assistant_status_getter() if assistant_status_getter is not None else None
-                        )
-                        native_video_hold = False
-                        if competition_native_video:
-                            with native_video_hold_lock:
-                                native_video_hold = native_video_hold_active or (
-                                    native_video_hold_until > 0.0
-                                    and time.perf_counter() < native_video_hold_until
-                                )
                         key = competition_display.show(
                             display_rgb,
                             result=result_obj,
@@ -706,9 +761,6 @@ class VisionPipelineService:
                                 )
                             stop_event.set()
                             break
-                    elif analysis_snapshot is None:
-                        time.sleep(0.01)
-                        continue
 
                     if max_frames > 0 and (display_seq if display_competition else processed_count) >= max_frames:
                         stop_event.set()
@@ -748,7 +800,7 @@ class VisionPipelineService:
                 capture_thread.join(timeout=2.0)
             if analysis_thread is not None and analysis_thread.is_alive():
                 analysis_thread.join(timeout=2.0)
-            if competition_display is not None:
+            if owns_competition_display and competition_display is not None:
                 competition_display.close()
 
         if degraded_capture_error is not None:
@@ -757,8 +809,31 @@ class VisionPipelineService:
             latest_result["stream"]["degraded_reason"] = (
                 f"{type(degraded_capture_error).__name__}: {degraded_capture_error}"
             )
+        if degraded_analysis_error is not None:
+            latest_result.setdefault("stream", {})
+            latest_result["stream"]["analysis_degraded"] = True
+            latest_result["stream"]["analysis_degraded_reason"] = (
+                f"{type(degraded_analysis_error).__name__}: {degraded_analysis_error}"
+            )
 
         return latest_result
+
+    def _get_recognizer(self, backend_name: str | None = None):
+        selected = str(backend_name or self.config.vision.recognizer.backend).strip()
+        recognizer = self._recognizer_cache.get(selected)
+        if recognizer is None:
+            recognizer = build_defect_recognizer(self.config.vision, selected)
+            self._recognizer_cache[selected] = recognizer
+            self.logger.info("vision recognizer cached: backend=%s", selected)
+        return recognizer
+
+    def release_runtime_resources(self) -> None:
+        for key, recognizer in list(self._recognizer_cache.items()):
+            try:
+                recognizer.close()
+            except Exception as exc:
+                self.logger.warning("vision recognizer close failed backend=%s error=%s", key, exc)
+        self._recognizer_cache.clear()
 
     def _build_status_page_url(self, status_html_path: Path) -> str:
         serve_root = status_html_path.parent.parent

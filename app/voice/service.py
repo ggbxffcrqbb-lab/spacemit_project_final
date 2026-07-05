@@ -454,6 +454,99 @@ class ResidentVoiceService:
             if audio_file and os.path.exists(audio_file):
                 os.remove(audio_file)
 
+    def transcribe_audio_file(
+        self,
+        audio_file: str | os.PathLike[str],
+        *,
+        update_status: bool = True,
+    ) -> str:
+        bind_current_thread(self._voice_cpuset)
+        audio_path = os.fspath(audio_file)
+        audio_seconds = -1.0
+        audio_size_kb = -1.0
+        try:
+            audio_size_kb = round(os.path.getsize(audio_path) / 1024.0, 2)
+            with wave.open(audio_path, "rb") as wav_file:
+                frame_rate = wav_file.getframerate() or 1
+                frame_count = wav_file.getnframes()
+                audio_seconds = round(frame_count / float(frame_rate), 3)
+        except Exception as exc:
+            self.logger.warning("Failed to inspect audio %s: %s", audio_path, exc)
+
+        if update_status:
+            self._update_status(
+                stage="transcribing",
+                headline="正在语音转写",
+                detail="ASR 正在将唤醒后的语音音频转成文本",
+                latest_metrics={
+                    "audio_seconds": audio_seconds,
+                    "audio_size_kb": audio_size_kb,
+                },
+            )
+        self.logger.info(
+            "ASR passive transcription start audio_seconds=%ss audio_size_kb=%s path=%s",
+            audio_seconds,
+            audio_size_kb,
+            audio_path,
+        )
+        asr_started_at = time.perf_counter()
+        with affinity_scope(
+            self._asr_cpuset,
+            logger=self.logger,
+            label="passive asr transcription",
+        ):
+            user_text = self.asr_model(audio_path)
+        asr_wall_ms = round((time.perf_counter() - asr_started_at) * 1000, 2)
+        self.logger.info(
+            "ASR passive transcription done wall=%sms audio_seconds=%ss text_chars=%s",
+            asr_wall_ms,
+            audio_seconds,
+            len(user_text.strip()),
+        )
+        if update_status and not user_text.strip():
+            self._update_status(
+                stage="listening",
+                headline="本轮语音未识别到有效文本",
+                detail="已返回待命状态，请靠近麦克风后重试",
+                latest_metrics={
+                    "asr_wall_ms": asr_wall_ms,
+                    "audio_seconds": audio_seconds,
+                    "text_chars": 0,
+                },
+            )
+        return user_text
+
+    def speak_text(self, text: str, *, headline: str = "正在语音播报", detail: str = "") -> None:
+        text = (text or "").strip()
+        if not text:
+            return
+        self.start_workers()
+        self._update_status(
+            stage="speaking",
+            headline=headline,
+            detail=detail or text,
+            latest_reply_text=text,
+        )
+        remaining = text
+        while remaining:
+            ready_segments, remaining = split_tts_segments(
+                remaining,
+                max_chars=self.config.voice.segment_max_chars,
+                min_chars=self.config.voice.segment_min_chars,
+                flush=True,
+            )
+            for segment in ready_segments:
+                self.tts_text_queue.put({"text": segment, "enqueued_at": time.time()})
+            break
+        self.tts_text_queue.join()
+        self.audio_queue.join()
+        self._update_status(
+            stage="ready",
+            headline="语音播报完成",
+            detail=text,
+            latest_reply_text=text,
+        )
+
     def process_text_turn(
         self,
         user_text: str,
